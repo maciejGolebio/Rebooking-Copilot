@@ -13,6 +13,8 @@ team could reasonably decide differently, for example because of team experience
 | [0002](0002-llm-integration-stub-plus-claude.md) | LLM integration: deterministic stub by default, optional Claude | Accepted | D-02 |
 | [0003](0003-runtime-dependencies.md) | Runtime dependencies: mainstream libraries allowed | Accepted | D-04 |
 | [0004](0004-llm-decision-authority.md) | LLM decision authority: the LLM decides within code guardrails | Accepted | D-07 (supersedes D-00a) |
+| [0005](0005-eligibility-tiers-and-confidence-cap.md) | Eligibility tiers and a confidence cap for LLM approvals | Accepted (amends 0004) | D-11, D-14, D-16, D-17, D-18 |
+| [0006](0006-money-model-settlement-fx-fees.md) | Money model: settlement form, FX and fee basis | Accepted (parts provisional) | D-10, D-12, D-13, D-18 |
 
 ## Template
 ```markdown

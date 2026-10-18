@@ -25,6 +25,16 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-06 | Packaging | uv + `pyproject.toml` + committed `uv.lock` | user | accepted |
 | D-07 | LLM decision authority | The LLM decides within code guardrails: it chooses among code-built eligible offers and judges soft trade-offs; code re-validates ([ADR-0004](adr/0004-llm-decision-authority.md)) | user | accepted |
 | D-08 | Process defaults | Commit at phase/slice boundaries after OK; `/frame` drafts an assessor email; review depth chosen at review time | default | accepted |
+| D-09 | Autonomy | Recommend only; a human approves every rebook; DESIGN.md describes a future auto tier | user | accepted |
+| D-10 | What counts as a saving | Configurable `settlementPolicy`; default `cash_only`; assumed refundable → cash, non-refundable → credit ([ADR-0006](adr/0006-money-model-settlement-fx-fees.md)) | user (default: user) | provisional (ask client Q1) |
+| D-11 | Hard blocks | Only *fewer included bags* blocks outright; cabin downgrade, lost refundability, carrier change, added stop are review-level ([ADR-0005](adr/0005-eligibility-tiers-and-confidence-cap.md)) | user | accepted |
+| D-12 | Currency mismatch | Stubbed `FxProvider`: timestamped static rates plus a spread margin; rate, source and as-of recorded ([ADR-0006](adr/0006-money-model-settlement-fx-fees.md)) | user | accepted (point of sale asked as client Q4) |
+| D-13 | Threshold | Net ≥ max(25, 5% of total paid) in the ticket's currency; configurable | user | accepted |
+| D-14 | Schedule window | Same flight is normal; another flight within ±60 min departure is review-level; beyond, or a next-day arrival, is ineligible | user | accepted |
+| D-15 | Tie-break (stub and fallback) | Highest net saving → smallest schedule change → most seats left | user | accepted |
+| D-16 | LLM approval on review-level differences | The LLM may recommend REBOOK; confidence capped at MEDIUM; trade-offs listed ([ADR-0005](adr/0005-eligibility-tiers-and-confidence-cap.md)) | user | accepted |
+| D-17 | Confidence | LOW/MEDIUM/HIGH bands from code signals; HIGH = future auto-tier eligible; the LLM can only lower it | user | accepted |
+| D-18 | Framing defaults | Fee = existing ticket's change fee × pax; as-of clock injected, default `capturedAt`; stub returns NEEDS_REVIEW for review-level differences; extra test cases under `tests/` | default | accepted (fee basis provisional: client Q3) |
 
 ## Entries
 
@@ -100,10 +110,76 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
   the user to send; review depth is chosen in `/review-submission`.
 - **Decided by:** default (stated at kickoff; the user didn't override them) · **Status:** accepted
 
+### D-09: Autonomy (2026-10-18)
+- **Context:** money moves on execution; the brief leaves "recommend vs act" open.
+- **Options:** A) recommend only B) tiered auto-execute C) fully autonomous
+- **Decision:** A. A human approves every rebook. DESIGN.md §6 describes what must be true before an auto tier for HIGH-confidence clean cases.
+- **Decided by:** user · **Status:** accepted
+
+### D-10: What counts as a saving (2026-10-18)
+- **Context:** QX7T2A is non-refundable; in practice its 180 USD difference may come back as travel credit.
+- **Options:** A) cash only B) credit at face value C) credit at a discount. The user asked for this to be **selectable**.
+- **Decision:** a configurable `settlementPolicy` (`cash_only` | `credit_face_value` | `credit_discounted(f)`), default
+  `cash_only`. The assumed settlement form is refundable → cash, non-refundable → credit; no fixture field says so.
+- **Decided by:** user (both the configurability and the default) · **Status:** provisional, client Q1
+- **Consequences / where it shows:** QX7T2A → NEEDS_REVIEW by default, with the residual reported as credit; [ADR-0006](adr/0006-money-model-settlement-fx-fees.md).
+
+### D-11: Hard blocks (2026-10-18)
+- **Context:** the fixtures contain every kind of difference: downgrade, bags, refundability, carrier and stops.
+- **Options (multi-select):** cabin downgrade · lost refundability · fewer bags · carrier change/added stop. The setup recommended all four.
+- **Decision:** only **fewer included bags** makes an offer ineligible. The others are review-level differences.
+- **Decided by:** user · **Status:** accepted
+- **Consequences / where it shows:** LM9P4C/OF-2001 and HB6W9E/OF-5002 are ineligible (bags 1 → 0). ZC3N1D/OF-4001 is review-level; [ADR-0005](adr/0005-eligibility-tiers-and-confidence-cap.md).
+
+### D-12: Currency mismatch (2026-10-18)
+- **Context:** RT5K8B was paid 2,200 EUR; the same flight and fare basis is offered at 2,100 USD.
+- **Options:** A) re-shop in the ticket's currency, NEEDS_REVIEW (the setup's recommendation) B) a stubbed FX table C) not comparable
+- **Decision:** B. An injected `FxProvider`, stubbed with timestamped static rates plus a spread margin; amounts are
+  compared in the ticket's currency; the rate, source and as-of are recorded in the output. The rates are labelled illustrative.
+- **Decided by:** user · **Status:** accepted. Whether the agency can exchange across points of sale is asked as client Q4.
+
+### D-13: Threshold (2026-10-18)
+- **Decision:** net ≥ max(25, 5% of total paid), in the ticket's currency, configurable and versioned with the policy.
+  QX7T2A needs 25 (it has 80), ZC3N1D needs 32 (it has 140), RT5K8B needs 110 EUR.
+- **Decided by:** user · **Status:** accepted
+
+### D-14: Schedule window (2026-10-18)
+- **Decision:** the same flight is normal. Another flight departing within ±60 min is a review-level difference.
+  Beyond ±60 min, or arriving on a later day, makes it ineligible.
+- **Decided by:** user · **Status:** accepted
+- **Consequences:** LM9P4C/OF-2001 (−20 min) is review-level on schedule, but it is already ineligible on bags.
+  HB6W9E/OF-5002 (+875 min, next-day arrival) is ineligible.
+
+### D-15: Tie-break (2026-10-18)
+- **Decision:** in stub mode, and as the fallback when Claude's answer is rejected: highest net saving → smallest
+  schedule change → most seats left.
+- **Decided by:** user · **Status:** accepted
+
+### D-16: LLM approval on review-level differences (2026-10-18), refines D-07
+- **Options:** A) yes, with confidence capped at MEDIUM B) always NEEDS_REVIEW, LLM advisory only C) yes, uncapped
+- **Decision:** A. The LLM may recommend REBOOK for a review-level offer; confidence is capped at MEDIUM and the
+  trade-offs are listed. Only clean offers can reach HIGH.
+- **Decided by:** user · **Status:** accepted · [ADR-0005](adr/0005-eligibility-tiers-and-confidence-cap.md)
+
+### D-17: Confidence (2026-10-18)
+- **Decision:** LOW / MEDIUM / HIGH bands computed from code signals (data completeness, margin above threshold,
+  snapshot age, FX use, review-level differences). HIGH = eligible for a future auto tier. The LLM can only lower confidence.
+- **Decided by:** user · **Status:** accepted
+
+### D-18: Framing defaults (2026-10-18)
+- **Fee basis:** the existing ticket's `changeFeePerPassenger` × passengers; the offer's fee only matters for a later
+  change. HB6W9E/OF-5002: −40 under this basis, +110 if the offer's fee were used. Provisional: client Q3.
+- **Clock:** the as-of time is injected and defaults to `capturedAt` (2026-07-08). With the wall clock, every fixture
+  flight has already departed.
+- **Stub on review-level differences:** NEEDS_REVIEW (follows from D-00c). Only Claude mode may recommend REBOOK there (D-16).
+- **Extra test cases** under `tests/`: several eligible offers for one booking, seat contention, FX edge cases, so the
+  LLM's choice and the tie-break are actually exercised.
+- **Decided by:** default (follows from earlier decisions; stated at `/frame`) · **Status:** accepted; fee basis provisional
+
 <!--
 Entry format:
 
-### D-09: <topic> (YYYY-MM-DD)
+### D-19: <topic> (YYYY-MM-DD)
 - **Context:** 1–2 lines; cite PNRs or fixture facts where relevant.
 - **Options:** A) …  B) …  C) …
 - **Decision:** …

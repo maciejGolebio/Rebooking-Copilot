@@ -29,6 +29,11 @@ full prose that matches the code, 1,500–2,500 words.
      an LLM agent that orchestrates deterministic tools (find candidates, check policy, compute saving), with code re-validating its decision ·
      a hybrid.
      Both are bounded by D-07 (ADR-0004). Recommend the one that fits the chosen LLM mode, and present the other as the considered variant.
+   - **LLM library** (header "LLM library"), deferred here from ADR-0003. Tie the recommendation to the agent shape:
+     the direct Anthropic SDK behind the `Reasoner` interface (one structured call; prompt and boundary stay explicit) ·
+     LangChain (provider-agnostic structured output, fake chat models for tests) ·
+     LangGraph (fits the tool-calling shape and a human approve → execute flow with interrupts and checkpoints).
+     Whichever isn't picked can still appear in DESIGN.md as the production option. Record it as a new ADR.
    - **Variant to present** (header "Variant", multiSelect): which rejected options to keep in DESIGN.md as
      "considered alternatives". The rubric rewards a considered variant.
    - The merged and deduped `needsDecision` / `questionsForUser` items that change the design.

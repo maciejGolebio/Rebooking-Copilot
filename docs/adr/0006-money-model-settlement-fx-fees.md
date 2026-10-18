@@ -1,0 +1,44 @@
+# ADR-0006: Money model: settlement form, FX and fee basis
+- **Status:** Accepted (parts provisional, pending answers from the assessors) · **Date:** 2026-10-18 · **Decided by:** user, plus defaults · **Log:** D-10, D-12, D-13, D-18
+
+## Context
+A cheaper fare is only a saving if the money actually comes back, in a currency we can compare, after the right
+fees. The fixtures don't say how a fare difference is returned. RT5K8B was paid in EUR but is offered in USD. The two
+change fees per booking (the ticket's and the offer's) can flip a result: HB6W9E / OF-5002 is −40 with the ticket's
+fee and +110 with the offer's.
+
+## Decision
+- **Fee basis** (D-18, default, provisional): net = (paid per passenger − offer per passenger) × passengers − *existing
+  ticket's* `changeFeePerPassenger` × passengers. The offer's fee only matters for a later change.
+- **Settlement form** (D-10, configurable): `settlementPolicy = cash_only | credit_face_value | credit_discounted(f)`.
+  The default is `cash_only`. Assumption (provisional): a refundable ticket returns the residual as cash and a
+  non-refundable one as travel credit. A saving that would come back as credit isn't counted under `cash_only`; it's
+  reported separately, and the case goes to NEEDS_REVIEW.
+- **FX** (D-12): an injected `FxProvider`, stubbed with a timestamped static rate table plus a spread margin. The rate,
+  its source and its as-of time are recorded in the output. Amounts are compared in the ticket's currency, and code never mixes currencies.
+- **Threshold** (D-13): net ≥ max(25, 5% of total paid), in the ticket's currency, configurable and versioned with the policy.
+- **Clock** (D-18): the as-of time is injected and defaults to the snapshot's `capturedAt`. It's never the wall clock.
+
+## Depends on (team & context)
+- **Ticketing and settlement practice:** whether the agency's GDS and airline contracts refund cash or issue credit,
+  and whether the business values credit (expiry, use rates).
+- **Point of sale:** an exchange is normally priced in the original ticket's currency and point of sale. Whether
+  this agency can sell or exchange into a fare quoted in another currency (RT5K8B) is a business and contractual question.
+- **Treasury policy:** which FX source and spread finance accepts.
+- **Who gets the saving** (traveler or paying client), and what a human review costs, which sets the threshold.
+
+## Consequences
+- With the defaults, QX7T2A (non-refundable, net 80) becomes NEEDS_REVIEW, with the residual reported as credit.
+  ZC3N1D's residual is cash.
+- RT5K8B's outcome depends on the stub rate. It clears the threshold only above about 1.0048 USD per EUR before spread
+  (break-even is 0.9545). The stub rates are labelled illustrative.
+- Every number in the output can be recomputed from fields in the same output.
+
+## Alternatives considered
+- **Credit at face value, or at a discount:** available as config values.
+- **Abstain, or re-shop in the ticket's currency, instead of converting:** the safer reading of point of sale.
+  It stays the production recommendation in DESIGN.md if the assessors confirm the constraint.
+- **The offer's fee as the fee basis:** rejected as a default, because it overstates savings.
+
+## Revisit when
+The assessors answer the settlement, fee-basis and point-of-sale questions, or a real FX source is wired in.

@@ -18,3 +18,7 @@ setup below; they count as "rejected or corrected" examples too.
 | 17:36 | kickoff | A standard-library-only runtime (recommended for a zero-install run) | rejected | User allowed mainstream libraries: pydantic, the LLM SDK, LangChain (D-04, ADR-0003) |
 | 17:36 | kickoff | Record decisions only in the ADR-lite log `docs/decisions.md` | modified | User asked for formal ADRs with a note on team experience and context, easy for an AI reviewer to find (`docs/adr/`) |
 | 17:36 | kickoff | "Python 3.11+" | modified | User pinned Python 3.14 (D-01) |
+| 17:55 | frame | A fixed "cash only" saving definition | modified | User: "allow to select". Now a configurable `settlementPolicy`, default cash-only (D-10) |
+| 17:55 | frame | Four hard blocks: downgrade, lost refundability, fewer bags, carrier change/extra stop | modified ★ | User kept only "fewer bags"; the rest became review-level differences judged by the LLM with confidence capped at MEDIUM (D-11, D-16). Why: _add_ |
+| 17:55 | frame | Re-shop in the ticket's currency for a currency mismatch (point-of-sale reasoning) | rejected | User chose a stubbed, timestamped FX table; point of sale goes to the assessors (D-12). Why: _add_ |
+| 17:55 | frame | Analyst subagent's default: count travel credit at face value | rejected | User kept cash-only as the default (D-10) |
