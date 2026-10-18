@@ -35,6 +35,13 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-16 | LLM approval on review-level differences | The LLM may recommend REBOOK; confidence capped at MEDIUM; trade-offs listed ([ADR-0005](adr/0005-eligibility-tiers-and-confidence-cap.md)) | user | accepted |
 | D-17 | Confidence | LOW/MEDIUM/HIGH bands from code signals; HIGH = future auto-tier eligible; the LLM can only lower it | user | accepted |
 | D-18 | Framing defaults | Fee = existing ticket's change fee × pax; as-of clock injected, default `capturedAt`; stub returns NEEDS_REVIEW for review-level differences; extra test cases under `tests/` | default | accepted (fee basis provisional: client Q3) |
+| D-19 | Architecture | B: an LLM agent over deterministic tools; code builds the eligible set independently and re-validates ([ADR-0007](adr/0007-agent-over-deterministic-tools.md)); considered alternatives in DESIGN.md: A, the Hybrid, C as production design | user | accepted |
+| D-20 | LLM library | LangChain (`langchain`, `langchain-anthropic`) as the `llm` extra, lazily imported; LangGraph described for production HITL ([ADR-0008](adr/0008-langchain-for-the-agent.md)) | user | accepted |
+| D-21 | Agent routing | Claude mode: the agent runs only for review-level or ≥2 eligible offers; an empty set or a single clean offer is decided deterministically | user | accepted |
+| D-22 | Agent veto | The agent declining a clean offer above the threshold → NEEDS_REVIEW `LLM_DISAGREES_WITH_POLICY` | user | accepted |
+| D-23 | Reproducibility | Determinism is claimed for stub mode only; Claude mode records model, prompt version, tool trace and answer | user | accepted |
+| D-24 | Prototype grafts from C | Build the fingerprint, a per-run seat ledger (greedy by net saving; losers `SEAT_CONTENTION`) and `asOf`/`expiresAt` (asOf + one reshop interval); the priority score is described only | user (ledger and expiry rules: default) | accepted |
+| D-25 | Agent guardrail defaults | Tools take ids only and are read-only; submit tool has no numeric fields; budget 6 turns / 30 s → fallback; tool results are untrusted data; model id, effort and structured-output mechanism are chosen in `/slice reasoner` | default | accepted |
 
 ## Entries
 
@@ -176,10 +183,57 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
   LLM's choice and the tie-break are actually exercised.
 - **Decided by:** default (follows from earlier decisions; stated at `/frame`) · **Status:** accepted; fee basis provisional
 
+### D-19: Architecture (2026-10-18)
+- **Context:** `/design-doc` compared A (a safety-first pipeline with one LLM decision), B (an agent over tools) and C (scale-first).
+- **Options:** A + grafts (recommended) · B · the Hybrid · C
+- **Decision:** B. The user also asked for all the other options to appear in DESIGN.md: A as the main considered
+  alternative (the user ticked "B" on the variant list, which was written assuming A would win; with B chosen this was
+  read as "present the rejected options"), the Hybrid, and C as the production design.
+- **Decided by:** user · **Status:** accepted · [ADR-0007](adr/0007-agent-over-deterministic-tools.md)
+
+### D-20: LLM library (2026-10-18)
+- **Options:** the direct SDK (recommended) · LangChain · LangGraph in the prototype
+- **Decision:** LangChain, lazily imported in Claude mode only. LangGraph, already a transitive dependency, is described
+  for the production approval flow. It resolves on Python 3.14.
+- **Decided by:** user · **Status:** accepted · [ADR-0008](adr/0008-langchain-for-the-agent.md)
+
+### D-21: Agent routing (2026-10-18)
+- **Decision:** in Claude mode the agent runs only when the eligible set has a review-level offer or two or more offers.
+  An empty set or a single clean offer is decided deterministically. Stub mode is always deterministic.
+- **Decided by:** user · **Status:** accepted
+- **Consequences:** with the fixtures alone the agent runs only for ZC3N1D. The multi-offer test cases exercise it.
+
+### D-22: Agent veto (2026-10-18)
+- **Decision:** if the agent declines a clean offer that clears the threshold, the result is NEEDS_REVIEW with
+  `LLM_DISAGREES_WITH_POLICY`, so a missed saving stays visible.
+- **Decided by:** user · **Status:** accepted
+
+### D-23: Reproducibility (2026-10-18)
+- **Options:** a replay cache (recommended) · record only · claim it for the stub only
+- **Decision:** claim determinism for **stub mode only**. Claude mode records the model, prompt version, tool trace and answer in the audit record.
+- **Decided by:** user · **Status:** accepted
+- **Consequences:** the CLAUDE.md reproducibility rule and money-safety invariant 5 now say "in stub mode".
+
+### D-24: Prototype grafts from C (2026-10-18)
+- **Decision:** build the fingerprint (inputs, eligible set, policy, prompt and model), a per-run seat ledger and
+  `asOf`/`expiresAt`. The priority score is described only.
+  - Defaults: the ledger allocates greedily by net saving, and losers get `SEAT_CONTENTION`.
+  - `expiresAt = asOf + one reshop interval`, configurable.
+- **Decided by:** user (what to build) and default (ledger and expiry rules) · **Status:** accepted
+
+### D-25: Agent guardrail defaults (2026-10-18)
+- **Decision:**
+  - Tools take ids only (never amounts, fees, passenger counts or rates) and are read-only.
+  - `submit_recommendation` has no numeric fields.
+  - Loop budget: 6 turns and 30 s, then the deterministic fallback.
+  - Tool results are treated as untrusted data in the prompt.
+  - The model id, effort and structured-output mechanism are chosen in `/slice reasoner` against the current API reference.
+- **Decided by:** default (from the architect's proposal) · **Status:** accepted
+
 <!--
 Entry format:
 
-### D-19: <topic> (YYYY-MM-DD)
+### D-26: <topic> (YYYY-MM-DD)
 - **Context:** 1–2 lines; cite PNRs or fixture facts where relevant.
 - **Options:** A) …  B) …  C) …
 - **Decision:** …

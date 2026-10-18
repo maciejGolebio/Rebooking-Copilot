@@ -36,7 +36,8 @@ expect to run them yourself. Guide: `docs/AI_SETUP.md`.
 - No binary floats for money: use Decimal or integer minor units, tagged with a currency. Never add or compare
   amounts across currencies without an explicit, timestamped FX rate. *What to do instead* is a `/frame` decision.
 - When unsure, return `NEEDS_REVIEW` (abstain), never a guess. A wrong "rebook" costs more than a missed saving.
-- Recommendations are reproducible: the same inputs and policy version give the same output, with a rule trace.
+- Every recommendation carries a rule trace. In stub mode the same inputs and policy version give the same output (D-23);
+  Claude mode records the model, prompt version and tool trace instead.
 
 **Runtime**
 - Runs offline: no API key, no network, no paid APIs. A real LLM is optional and must degrade cleanly to the deterministic stub.
@@ -63,10 +64,12 @@ expect to run them yourself. Guide: `docs/AI_SETUP.md`.
 - **Stack:** Python 3.14 ([ADR-0001](docs/adr/0001-python-3-14.md)) · uv + `pyproject.toml` + committed `uv.lock` (D-06) · src layout, package `rebooking_copilot`
 - **Commands:** install `uv sync` · test `uv run pytest` · run `uv run rebooking-copilot [--pnrs PATH] [--fares PATH]` ·
   offline check `env -u ANTHROPIC_API_KEY uv run rebooking-copilot`
+- **Architecture:** an LLM agent over deterministic tools; code builds the eligible set and re-validates (D-19, ADR-0007).
+  The agent runs only for review-level or multi-offer cases (D-21).
 - **LLM mode:** deterministic stub by default; optional Claude when `ANTHROPIC_API_KEY` is set *and* an explicit switch (defined in
   `/slice reasoner`) is on (D-02, ADR-0002). The LLM decides only inside the code-built eligible set (D-07, ADR-0004).
-- **Dependencies:** pydantic at runtime · `anthropic` as the optional extra `llm` (`uv sync --extra llm`) · LangChain allowed,
-  decided in `/slice reasoner` · dev: pytest, hypothesis (D-04, ADR-0003)
+- **Dependencies:** pydantic at runtime · LangChain (`langchain`, `langchain-anthropic`) in the optional extra `llm`, lazily
+  imported (D-20, ADR-0008; added in `/slice reasoner`) · dev: pytest, hypothesis (D-04, ADR-0003)
 - **Method:** test-first: a golden case per fixture PNR plus invariant/property tests (D-03)
 - **Output:** `recommendations.json` validated by a JSON Schema generated from the pydantic models, plus a stdout table (D-05)
 - **Process:** commit at phase/slice boundaries after OK; review depth chosen at review time (D-08)

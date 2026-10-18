@@ -22,3 +22,6 @@ setup below; they count as "rejected or corrected" examples too.
 | 17:55 | frame | Four hard blocks: downgrade, lost refundability, fewer bags, carrier change/extra stop | modified ★ | User kept only "fewer bags"; the rest became review-level differences judged by the LLM with confidence capped at MEDIUM (D-11, D-16). Why: _add_ |
 | 17:55 | frame | Re-shop in the ticket's currency for a currency mismatch (point-of-sale reasoning) | rejected | User chose a stubbed, timestamped FX table; point of sale goes to the assessors (D-12). Why: _add_ |
 | 17:55 | frame | Analyst subagent's default: count travel credit at face value | rejected | User kept cash-only as the default (D-10) |
+| 18:16 | design | Architecture A (safety-first pipeline, one LLM call) + grafts | rejected ★ | User chose B, an LLM agent over deterministic tools (D-19, ADR-0007). Why: _add_ |
+| 18:16 | design | Direct Anthropic SDK behind the Reasoner interface | rejected | User chose LangChain (D-20, ADR-0008). Why: _add_ |
+| 18:16 | design | A replay cache to make Claude mode reproducible | rejected | User: claim determinism for stub mode only (D-23) |

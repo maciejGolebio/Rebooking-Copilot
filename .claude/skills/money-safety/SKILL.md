@@ -37,7 +37,8 @@ deterministic checks: a code-built eligible set, code-computed numbers, re-valid
 3. Any failing hard constraint ⇒ never REBOOK.
 4. Monotonicity: raising the offer price or a fee never moves a decision *toward* REBOOK (neither DO_NOT_REBOOK nor
    NEEDS_REVIEW may become REBOOK), and never increases the saving.
-5. Determinism: same input + policy version ⇒ identical output. Inject the clock and sort outputs and candidates stably.
+5. Determinism (stub mode, D-23): same input + policy version ⇒ identical output. Inject the clock and sort outputs and
+   candidates stably. Claude mode is not asserted deterministic; it records the model, prompt version and tool trace.
 6. Reasoner bounds (D-07): for *any* reasoner output, adversarial ones included, REBOOK happens only for an offer
    in the eligible set; output numbers equal the code-computed ones; invalid output, an ineligible offer id, invented
    numbers or a timeout lead to the deterministic fallback, with the reason recorded.
