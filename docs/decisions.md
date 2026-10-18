@@ -42,6 +42,7 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-23 | Reproducibility | Determinism is claimed for stub mode only; Claude mode records model, prompt version, tool trace and answer | user | accepted |
 | D-24 | Prototype grafts from C | Build the fingerprint, a per-run seat ledger (greedy by net saving; losers `SEAT_CONTENTION`) and `asOf`/`expiresAt` (asOf + one reshop interval); the priority score is described only | user (ledger and expiry rules: default) | accepted |
 | D-25 | Agent guardrail defaults | Tools take ids only and are read-only; submit tool has no numeric fields; budget 6 turns / 30 s → fallback; tool results are untrusted data; model id, effort and structured-output mechanism are chosen in `/slice reasoner` | default | accepted |
+| D-26 | Input data contract | Reject each bad record on its own with `DATA_INVALID` / `DATA_INCONSISTENT` / `UNSUPPORTED_ITINERARY`; no coercion, no unknown fields, floats rejected for money, unknown ISO currencies rejected; multi-segment → unsupported | default | accepted |
 
 ## Entries
 
@@ -230,10 +231,25 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
   - The model id, effort and structured-output mechanism are chosen in `/slice reasoner` against the current API reference.
 - **Decided by:** default (from the architect's proposal) · **Status:** accepted
 
+### D-26: Input data contract (2026-10-18)
+- **Context:** `/slice core`. D-00b and D-00c require exact money and abstaining on doubt, and invariant 7 requires one result per input booking.
+- **Decision:**
+  - Every record is validated on its own. A bad one is rejected with a reason code and later reported as NEEDS_REVIEW;
+    the rest of the file still loads.
+  - `DATA_INVALID`: wrong type, a missing or unknown field, a value out of range, a float in a money amount, an unknown ISO 4217 code.
+  - `DATA_INCONSISTENT`: totalPaid ≠ price × passengers, mixed currencies within a ticket or offer, segment cabin ≠ ticket
+    cabin, offer route date ≠ departure date.
+  - `UNSUPPORTED_ITINERARY`: more than one segment (v1 is single-segment only).
+  - No check that departure comes before arrival, because local times without an offset can legitimately look reversed.
+  - Presentation rounding is ROUND_HALF_EVEN to ISO minor units.
+  - Only a file that is unusable as a whole stops the run: unreadable JSON, missing top-level lists, or a capture time without a timezone.
+- **Decided by:** default (follows from D-00b and D-00c; stated at `/slice core`) · **Status:** accepted
+- **Consequences / where it shows:** `loader.py`, `models.py`, `money.py`; `tests/test_loader.py`, `tests/test_money.py`.
+
 <!--
 Entry format:
 
-### D-26: <topic> (YYYY-MM-DD)
+### D-27: <topic> (YYYY-MM-DD)
 - **Context:** 1–2 lines; cite PNRs or fixture facts where relevant.
 - **Options:** A) …  B) …  C) …
 - **Decision:** …

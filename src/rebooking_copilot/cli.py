@@ -1,13 +1,10 @@
-"""Command-line entrypoint. Skeleton only: loads the fixtures; the pipeline arrives with /slice."""
+"""Command-line entrypoint: loads and validates the fixtures; recommendations arrive with /slice decision."""
 
 import argparse
-import json
+import sys
 from pathlib import Path
 
-
-def load_json(path: Path) -> dict:
-    with path.open(encoding="utf-8") as fh:
-        return json.load(fh)
+from rebooking_copilot.loader import LoaderError, load_fare_snapshot, load_pnrs
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -16,9 +13,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fares", type=Path, default=Path("fixtures/fares_feed.json"), help="fare snapshot")
     args = parser.parse_args(argv)
 
-    pnrs = load_json(args.pnrs)["pnrs"]
-    offers = load_json(args.fares)["offers"]
-    print(f"Loaded {len(pnrs)} bookings and {len(offers)} offers. Recommendations: not implemented yet.")
+    try:
+        bookings = load_pnrs(args.pnrs)
+        snapshot = load_fare_snapshot(args.fares)
+    except LoaderError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(
+        f"Loaded {len(bookings.pnrs)} bookings ({len(bookings.rejected)} rejected) and "
+        f"{len(snapshot.offers)} offers ({len(snapshot.rejected)} rejected); snapshot {snapshot.captured_at.isoformat()}."
+    )
+    for rej in bookings.rejected:
+        print(f"  rejected booking #{rej.index} {rej.pnr or '?'}: " + "; ".join(f"{i.code}: {i.detail}" for i in rej.issues))
+    for rej in snapshot.rejected:
+        print(f"  rejected offer #{rej.index} {rej.offer_id or '?'}: " + "; ".join(f"{i.code}: {i.detail}" for i in rej.issues))
+    print("Recommendations: not implemented yet.")
     return 0
 
 

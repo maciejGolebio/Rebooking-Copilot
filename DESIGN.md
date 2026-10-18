@@ -75,6 +75,8 @@ flowchart TD
 
 ## 4. Correctness & money safety
 - **Money:** `Decimal` amounts tagged with a currency; cross-currency arithmetic raises; per-passenger and total amounts are separate fields (D-00b).
+- **Input contract:** each bad record is rejected on its own with `DATA_INVALID` / `DATA_INCONSISTENT` / `UNSUPPORTED_ITINERARY`, never
+  coerced, and becomes NEEDS_REVIEW. Floats, unknown fields and unknown currencies are rejected (D-26).
 - **Net** = (paid per passenger − offer per passenger) × passengers − *existing ticket's* change fee × passengers (D-18, provisional).
 - **Settlement:** `settlementPolicy`, default `cash_only`. A credit residual is reported separately and leads to NEEDS_REVIEW (D-10).
 - **FX:** an injected provider stubbed with timestamped rates plus a spread margin; the rate, source and as-of are recorded (D-12).
@@ -133,7 +135,8 @@ flowchart TD
 ## 8. What I deliberately did not do, and what's next
 | Area | Plan | Note |
 |---|---|---|
-| Core, eligible set, money, FX stub, seat ledger, fingerprint, expiry | Built | `/slice core`, `/slice decision` |
+| Typed models, Money, validating loader | **Built** (`/slice core`) | Money properties (hypothesis), per-record rejection, CLI loads fixtures |
+| Eligible set, policy tiers, money breakdown, FX stub, seat ledger, fingerprint, expiry | Planned | `/slice decision` |
 | LangChain agent, tools, validator, prompt, fallback | Built (Claude mode optional) | `/slice reasoner` |
 | Tests: golden, invariants, adversarial fake agent, multi-offer cases | Built | `test-engineer` |
 | Priority score, scheduler, queues, batch calls, caching, shadow mode | Described | §5 |
