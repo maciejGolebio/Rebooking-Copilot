@@ -18,7 +18,7 @@ Rules:
 - Golden tests: for each fixture PNR in scope, assert action, chosen offer, net saving (exact decimal and currency)
   and reason codes. Derive each expected value with the formula written out in a comment, and cite the D-id that sets the policy.
 - Invariant tests come from the `money-safety` list (recomputable saving, no REBOOK on a failed hard constraint,
-  monotonicity, determinism, reasoner can only downgrade, one result per PNR). Use property-based testing
+  monotonicity, determinism, reasoner bounded to the eligible set with adversarial fake-LLM outputs, one result per PNR). Use property-based testing
   only if the library is already a recorded dependency. Otherwise propose it in your report.
 - Edge cases beyond the fixtures go under `tests/` as small inline data: currency mismatch, seats < pax,
   inconsistent totals, several eligible offers, missing fields.

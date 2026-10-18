@@ -18,7 +18,7 @@ Method:
 2. Walk the `money-safety` invariants and the `rebooking-domain` trap checklist against the code. Look at
    float usage, currency mixing, per-pax vs total, which fee is applied, sign errors, rounding, missing seat
    checks, defaults that silently coerce, exception paths that fall through to REBOOK, nondeterminism,
-   LLM output reaching the gate, and output fields that can't be recomputed.
+   LLM output that skips re-validation or picks an offer outside the eligible set (D-07), and output fields that can't be recomputed.
 3. **Reproduce** when you can: run the existing tests, or a throwaway script or test in the scratchpad, never in the repo. A reproduced finding beats a suspected one.
 4. Don't change repository files.
 

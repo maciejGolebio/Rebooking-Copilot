@@ -89,6 +89,8 @@ If your Claude Code build has no Workflow tool, each skill falls back to launchi
 **Context files:**
 - `CLAUDE.md`: brief import, rules, phase map, quick reference (filled by `/kickoff`), decision log import.
 - `docs/decisions.md`: the source of truth for every choice. It starts with the pre-set D-00 rules, and every subagent sees it.
+- `docs/adr/`: Architecture Decision Records for the architecture-significant choices. Each ADR has a
+  "Depends on (team & context)" section, and DESIGN.md §10 indexes them.
 - `docs/AI_USAGE_LOG.md`: raw material for the AI-usage note.
 
 ## 4. Where you'll be asked for input

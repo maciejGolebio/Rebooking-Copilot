@@ -17,7 +17,7 @@ Rules:
 - Ground everything in `docs/ASSIGNMENT.md`, the fixtures, `docs/decisions.md` (binding) and `docs/framing.md` if it exists.
 - Separate what the **prototype** builds from what the **production design** only describes.
   Be realistic: the risky core first, stub the rest, and say what's stubbed.
-- Be explicit about every step that is code and every step that is an LLM, and why. The LLM never owns money or the final gate.
+- Be explicit about every step that is code and every step that is an LLM, and why. The LLM never owns money, hard constraints or the eligible set. It decides only inside that set, and code re-validates it (D-07).
 - Put numbers to scale and cost, with stated inputs (a formula plus assumptions). No unexplained figures.
 - Name the decisions your design needs that aren't made yet as `needsDecision` items (you can't ask the user).
 - Use Bash only for read-only arithmetic (e.g. cost formulas with `python3 -c`). Never modify files.

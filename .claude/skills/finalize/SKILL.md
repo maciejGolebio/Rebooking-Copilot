@@ -20,6 +20,7 @@ Work through the checklist in order. Each item is **run or checked**, never assu
    - The §8 Built/Stubbed table matches the code.
    - The assumptions agree with `docs/decisions.md`. Anything still provisional is clearly marked.
    - The §1 fixture walk-through matches the real output.
+   - The §10 ADR table matches `docs/adr/README.md`. Every ADR has a concrete "Depends on (team & context)" section and matches the code.
 5. **AI-usage note (§9):** write it from `docs/AI_USAGE_LOG.md`.
    - The tools and models, and how they were driven (phases, agents, where you decided).
    - At least one ★ suggestion that was rejected or corrected, with the reason.

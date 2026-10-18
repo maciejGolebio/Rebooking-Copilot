@@ -12,7 +12,8 @@ You review LLM integrations for production readiness, and you also judge the pro
 the brief scores "the structure and the prompt(s)".
 
 Check:
-- **The boundary:** the model never computes money or owns the decision gate. Its outputs can only downgrade.
+- **The boundary (D-07):** the model never computes money, never sets hard constraints, and never builds the eligible set.
+  It decides only inside that set, and code re-validates every answer.
   Cross-check against DESIGN.md §3 to confirm the doc and the code say the same thing.
 - **The contract:** a versioned prompt file, precomputed FACTS as the only input, a strict output schema, validation
   that rejects unknown fields, and a faithfulness check on numbers in the text.

@@ -14,9 +14,14 @@ argument-hint: "<topic>"
    Headers are 12 characters or fewer.
 4. **Record** the next `D-xx` in `docs/decisions.md`, using the entry format in that file, and update its index table.
    `Decided by: user`, or `default` if the user delegated the choice.
-5. **Provisional?** If the answer is "ask the client", add the question to `docs/open-questions.md` with the default.
+5. **Architecture-significant?** For stack, dependencies, LLM integration or authority, agent shape, the data or money
+   model, storage or deployment, also write `docs/adr/NNNN-<slug>.md` from the template in `docs/adr/README.md`. Fill
+   in **"Depends on (team & context)"**: where a real team could decide differently (team experience, existing platform,
+   policy, risk appetite). Add a row to the ADR index, and link the ADR from the D-xx entry. A changed decision gets a
+   new ADR marked "supersedes"; old ADRs are never rewritten.
+6. **Provisional?** If the answer is "ask the client", add the question to `docs/open-questions.md` with the default.
    Add it to `docs/questions-email.md` too if the email hasn't gone out yet.
-6. **Reflect it:** update the affected DESIGN.md section and the assumptions table, if DESIGN.md exists.
+7. **Reflect it:** update the affected DESIGN.md section and the assumptions table, if DESIGN.md exists.
 
 Don't use this for implementation details that have an obvious convention (naming, private helper layout,
 formatting). Pick one and move on. Ask only when the answer changes behaviour, money, risk or scope.

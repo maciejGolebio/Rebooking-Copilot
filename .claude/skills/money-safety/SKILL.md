@@ -6,8 +6,8 @@ user-invocable: false
 
 # Money safety rules
 
-Principle: **a wrong REBOOK is the expensive failure.** Every path that can produce REBOOK must be
-deterministic, recomputable and covered by a test. Uncertainty resolves to `NEEDS_REVIEW`.
+Principle: **a wrong REBOOK is the expensive failure.** Every path that can produce REBOOK must be bounded by
+deterministic checks: a code-built eligible set, code-computed numbers, re-validation (D-07), and a test. Uncertainty resolves to `NEEDS_REVIEW`.
 
 ## Representation
 - Use Decimal (Python `decimal.Decimal`; TS: integer minor units in `bigint`/`number` ints, or a
@@ -32,14 +32,15 @@ deterministic, recomputable and covered by a test. Uncertainty resolves to `NEED
 
 ## Invariants (turn each into a test: golden per fixture PNR, plus property tests where the stack has them)
 1. `estimatedNetSaving` is recomputable from fields in the same output (gross, fees, pax).
-2. REBOOK ⇒ every hard constraint passes ∧ same currency (or a sourced FX rate) ∧ seats ≥ pax ∧
-   net saving ≥ threshold ∧ the input data is consistent.
+2. REBOOK ⇒ the chosen offer is in the code-built eligible set: every hard constraint passes ∧ same currency (or a
+   sourced FX rate) ∧ seats ≥ pax ∧ net saving ≥ threshold ∧ the input data is consistent.
 3. Any failing hard constraint ⇒ never REBOOK.
 4. Monotonicity: raising the offer price or a fee never moves a decision *toward* REBOOK (neither DO_NOT_REBOOK nor
    NEEDS_REVIEW may become REBOOK), and never increases the saving.
 5. Determinism: same input + policy version ⇒ identical output. Inject the clock and sort outputs and candidates stably.
-6. Reasoner independence: replacing the LLM/stub output with anything schema-valid can only keep
-   or *downgrade* the decision (REBOOK → NEEDS_REVIEW), never upgrade it.
+6. Reasoner bounds (D-07): for *any* reasoner output, adversarial ones included, REBOOK happens only for an offer
+   in the eligible set; output numbers equal the code-computed ones; invalid output, an ineligible offer id, invented
+   numbers or a timeout lead to the deterministic fallback, with the reason recorded.
 7. Exactly one recommendation per input PNR, including malformed ones (they get NEEDS_REVIEW, not a crash).
 
 ## Confidence

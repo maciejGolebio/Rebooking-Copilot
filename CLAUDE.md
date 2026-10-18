@@ -27,12 +27,12 @@ decision-making. Depth and judgment on a few things beat shallow coverage.
 Anytime: `/decide <topic>`, `/ai-log`. Phase commands are user-invoked: suggest them, don't
 expect to run them yourself. Guide: `docs/AI_SETUP.md`.
 
-## Rules (pre-set as D-00a–e in docs/decisions.md; the user may revise them at /kickoff)
+## Rules (D-00b–e and D-07 in docs/decisions.md; architecture decisions in docs/adr/)
 **Money & decisions**
-- Every number and the final rebook gate come from deterministic code, whatever the agent shape: a pipeline
-  with an LLM explainer, or an LLM orchestrating deterministic tools. The LLM never computes or invents a
-  number; any number it emits is ignored or re-verified. It may make a recommendation *more* conservative
-  (escalate to review), never approve one.
+- Every number, every hard constraint and the **eligible set** come from deterministic code, whatever the agent
+  shape. Within that set the LLM may choose the offer and judge soft trade-offs, approving or rejecting (D-07,
+  ADR-0004). Code re-validates its answer (the offer is eligible, the output is schema-valid, it adds no numbers)
+  and otherwise falls back to the deterministic decision. The LLM never computes or invents a number.
 - No binary floats for money: use Decimal or integer minor units, tagged with a currency. Never add or compare
   amounts across currencies without an explicit, timestamped FX rate. *What to do instead* is a `/frame` decision.
 - When unsure, return `NEEDS_REVIEW` (abstain), never a guess. A wrong "rebook" costs more than a missed saving.
@@ -60,7 +60,17 @@ expect to run them yourself. Guide: `docs/AI_SETUP.md`.
 
 ## Project decisions (quick reference; rationale lives in docs/decisions.md)
 <!-- kickoff:start -->
-Not set yet. Run `/kickoff`.
+- **Stack:** Python 3.14 ([ADR-0001](docs/adr/0001-python-3-14.md)) · uv + `pyproject.toml` + committed `uv.lock` (D-06) · src layout, package `rebooking_copilot`
+- **Commands:** install `uv sync` · test `uv run pytest` · run `uv run rebooking-copilot [--pnrs PATH] [--fares PATH]` ·
+  offline check `env -u ANTHROPIC_API_KEY uv run rebooking-copilot`
+- **LLM mode:** deterministic stub by default; optional Claude when `ANTHROPIC_API_KEY` is set *and* an explicit switch (defined in
+  `/slice reasoner`) is on (D-02, ADR-0002). The LLM decides only inside the code-built eligible set (D-07, ADR-0004).
+- **Dependencies:** pydantic at runtime · `anthropic` as the optional extra `llm` (`uv sync --extra llm`) · LangChain allowed,
+  decided in `/slice reasoner` · dev: pytest, hypothesis (D-04, ADR-0003)
+- **Method:** test-first: a golden case per fixture PNR plus invariant/property tests (D-03)
+- **Output:** `recommendations.json` validated by a JSON Schema generated from the pydantic models, plus a stdout table (D-05)
+- **Process:** commit at phase/slice boundaries after OK; review depth chosen at review time (D-08)
+- **Session model:** Claude Opus 5.5 (`claude-opus-5-5`) in the Claude Code desktop app
 <!-- kickoff:end -->
 
 Decision log: @docs/decisions.md

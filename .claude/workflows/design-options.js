@@ -76,11 +76,11 @@ const JUDGE_SCHEMA = {
 const ANGLES = [
   {
     key: 'safety-first',
-    brief: 'A deterministic pipeline owns everything that touches money and eligibility. The LLM only explains and may flag ambiguity (escalate to human, never approve). Optimise for money safety, auditability and a small, fully-tested core.',
+    brief: 'A deterministic pipeline owns everything that touches money and eligibility. Within D-07 the LLM decision role is kept narrow (choose among eligible offers with a tightly-tested prompt) and anything ambiguous goes to a human. Optimise for money safety, auditability and a small, fully-tested core.',
   },
   {
     key: 'judgement-where-it-pays',
-    brief: 'Deterministic hard gates first; the LLM adds value only on genuinely soft trade-offs (schedule inconvenience, lost perks vs saving) as a schema-bound advisory signal combined with deterministic confidence. Optimise for recommendation quality on ambiguous cases without letting the model approve anything.',
+    brief: 'Deterministic hard gates and the eligible set first; the LLM decides the genuinely soft trade-offs (schedule inconvenience, lost perks vs saving) inside the eligible set (D-07), combined with deterministic confidence. Optimise for recommendation quality on ambiguous cases.',
   },
   {
     key: 'scale-first',
@@ -110,7 +110,7 @@ const judgement = await agent(
     `pragmatism (a small, honest prototype of the risky core), communication. Recommend one, list ideas worth grafting from the others, ` +
     `which rejected options deserve a "considered alternative" paragraph in DESIGN.md, and the questions the user must answer ` +
     `before committing (options + recommendation) - merge and dedupe the architects' needsDecision items into questionsForUser, ` +
-    `and include the agent-shape question (deterministic pipeline + LLM explainer vs LLM orchestrating deterministic tools with the gate in code) ` +
+    `and include the agent-shape question (pipeline + LLM decider inside the eligible set vs LLM orchestrating deterministic tools, both bounded by D-07) ` +
     `unless ${DECISIONS} settles it. Respect ${DECISIONS}.\n\nOptions (JSON):\n${JSON.stringify(proposed, null, 1)}`,
   { label: 'judge', phase: 'Judge', schema: JUDGE_SCHEMA },
 )

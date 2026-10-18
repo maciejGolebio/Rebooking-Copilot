@@ -25,7 +25,7 @@
 ## 4. Correctness & money safety
 - Money model: currency-tagged decimals, per-pax vs total, which fee applies, FX policy.
 - Equivalence and hard constraints (versioned policy): a table of rule → hard or soft → rationale.
-- How we avoid acting on a wrong or hallucinated saving: recompute, invariants, LLM can only downgrade, abstain.
+- How we avoid acting on a wrong or hallucinated saving: recompute, invariants, the LLM decides only inside the code-built eligible set and is re-validated, abstain.
 - Before any action: re-price and re-validate, idempotency, secure new before releasing old, caps, kill switch.
 - Tests: golden case per fixture PNR, plus the invariants.
 
@@ -50,3 +50,9 @@ Next steps, in priority order, with what I'd do with more time.
 
 ## 9. AI usage note
 Tools, and how they were driven (setup in `.claude/`, workflow phases). One suggestion I rejected or corrected, and why (from `docs/AI_USAGE_LOG.md`).
+
+## 10. Architecture decision records
+The architecture-significant decisions are in [`docs/adr/`](docs/adr/README.md). Each one has a **"Depends on (team & context)"**
+section saying where a real team could reasonably decide differently.
+| ADR | Decision | Depends on (one line) |
+|---|---|---|

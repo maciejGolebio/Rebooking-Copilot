@@ -25,16 +25,16 @@ full prose that matches the code, 1,500–2,500 words.
 3. Ask the user (AskUserQuestion, at most 4 questions per call; split into more calls if needed):
    - **Approach** (header "Approach"): the recommended option first.
    - **Agent shape** (header "Agent shape"), unless it's already decided:
-     a deterministic pipeline with an LLM explainer/escalator ·
-     an LLM agent that orchestrates deterministic tools (find candidates, check policy, compute saving), with the final gate in code ·
+     a deterministic pipeline up to the eligible set, with the LLM deciding inside it ·
+     an LLM agent that orchestrates deterministic tools (find candidates, check policy, compute saving), with code re-validating its decision ·
      a hybrid.
-     Recommend the one that fits the chosen LLM mode, and present the other as the considered variant.
-     The brief asks for an "AI agent", so an explainer-only design has to justify itself.
+     Both are bounded by D-07 (ADR-0004). Recommend the one that fits the chosen LLM mode, and present the other as the considered variant.
    - **Variant to present** (header "Variant", multiSelect): which rejected options to keep in DESIGN.md as
      "considered alternatives". The rubric rewards a considered variant.
    - The merged and deduped `needsDecision` / `questionsForUser` items that change the design.
-4. Record the choices as D-xx entries. Create DESIGN.md from [template.md](template.md) and fill in the **v0**:
-   TL;DR, §2 flow, §3 table, §4 policy table, §6 autonomy, and the §7 assumptions, all as bullets.
+4. Record the choices as D-xx entries, and write ADRs for the approach and the agent shape (see `/decide` step 5).
+   Create DESIGN.md from [template.md](template.md) and fill in the **v0**: TL;DR, §2 flow, §3 table, §4 policy table,
+   §6 autonomy, §7 assumptions and §10 (the ADR table), all as bullets.
 
 ## Mode: `<section>`
 - Write or revise only that section. Each assumption cites its `D-xx`; each open question links to `docs/open-questions.md`.
