@@ -3,9 +3,8 @@
 .env.*
 !.env.example
 
-# Claude Code personal / runtime state
+# Claude Code personal settings
 .claude/settings.local.json
-.claude/state/
 
 # Python
 __pycache__/

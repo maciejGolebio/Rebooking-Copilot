@@ -10,18 +10,18 @@ disable-model-invocation: true
 DESIGN.md is what gets scored most. Write it for a senior teammate deciding whether to trust this in
 production: decisions first, then reasons, then trade-offs. Use tables over prose.
 
-There are two passes. **v0 (about 20 minutes, before the build):** bullets only, enough to build against. **v1
-(about 25 minutes, after the build):** full prose that matches the code, 1,500–2,500 words.
+There are two passes. **v0 (before the build):** bullets only, enough to build against. **v1 (after the build):**
+full prose that matches the code, 1,500–2,500 words.
 
 ## Mode: `options` (default when DESIGN.md doesn't exist yet)
 1. Generate options.
    - **Quick (default):** spawn one `solution-architect` agent and ask it for 2–3 *contrasting* architectures in one
      answer (e.g. safety-first · judgement-where-it-pays · scale-first). For each: the flow, the LLM vs code
-     split, money safety, the scale story, what's buildable in the remaining minutes, and its `needsDecision` items.
-   - **Deep (`options deep`, about 10–15 minutes):** use the Workflow tool, `name: "design-options"`, args
-     `{"decisions": "docs/decisions.md", "framing": "docs/framing.md", "remainingMinutes": <from timebox status>}`.
+     split, money safety, the scale story, what the prototype builds vs only describes, and its `needsDecision` items.
+   - **Deep (`options deep`):** use the Workflow tool, `name: "design-options"`, args
+     `{"decisions": "docs/decisions.md", "framing": "docs/framing.md"}`.
      If the tool isn't available, launch 3 `solution-architect` agents in ONE message, one per angle.
-2. Show a compact comparison table: option · idea · LLM role · money-safety story · scale story · buildable now · score.
+2. Show a compact comparison table: option · idea · LLM role · money-safety story · scale story · prototype scope · score.
 3. Ask the user (AskUserQuestion, at most 4 questions per call; split into more calls if needed):
    - **Approach** (header "Approach"): the recommended option first.
    - **Agent shape** (header "Agent shape"), unless it's already decided:
@@ -50,7 +50,7 @@ Rewrite the bullets into tight prose and tables that match the code and the real
 
 ## Mode: `review`
 Spawn the `assessor` agent on DESIGN.md (and the code if it exists). Show its scorecard and top 5 fixes, ranked
-by value per minute. Ask which to apply (AskUserQuestion, multiSelect). Log any rejected suggestion with `/ai-log`.
+by value relative to effort. Ask which to apply (AskUserQuestion, multiSelect). Log any rejected suggestion with `/ai-log`.
 
 ## Always
 Keep DESIGN.md consistent with `docs/decisions.md` and with the code. After each slice, update §8.

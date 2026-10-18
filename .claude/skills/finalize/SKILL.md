@@ -1,6 +1,6 @@
 ---
 name: finalize
-description: Phase 5b. Makes the submission complete and verifiable. Covers the README with run steps and a real example output, the AI-usage note (including disclosure of the prepared setup), the time note, an offline no-key run, secret and fixture checks, and packaging.
+description: Phase 5b. Makes the submission complete and verifiable. Covers the README with run steps and a real example output, the AI-usage note (including disclosure of the prepared setup), an offline no-key run, secret and fixture checks, and packaging.
 disable-model-invocation: true
 ---
 
@@ -23,21 +23,18 @@ Work through the checklist in order. Each item is **run or checked**, never assu
 5. **AI-usage note (§9):** write it from `docs/AI_USAGE_LOG.md`.
    - The tools and models, and how they were driven (phases, agents, where you decided).
    - At least one ★ suggestion that was rejected or corrected, with the reason.
-   - **Disclosure:** the `.claude/` setup (skills, checklists, agents) was prepared with AI *before* the timed
-     work. Say roughly how long that took, and that the knowledge checklists were AI-drafted and then reviewed.
-6. **Time note:** summarise `docs/TIMELOG.md` in 3–5 lines: where the time went, what was cut, and any pauses with
-   their reason. Put it in the README or a DESIGN.md appendix.
-7. **Fixtures unchanged:** `shasum -a 256 -c .claude/fixtures.sha256`.
-8. **No secrets:**
+   - **Disclosure:** the `.claude/` setup (skills, checklists, agents) was prepared with AI before the
+     implementation work, and the knowledge checklists were AI-drafted and then reviewed.
+6. **Fixtures unchanged:** `shasum -a 256 -c .claude/fixtures.sha256`.
+7. **No secrets:**
    - `python3 .claude/hooks/guard.py --scan --history` scans the working tree and the git history with the guard's patterns.
    - `git ls-files` shows no `.env`.
-9. **What ships:** ask (AskUserQuestion, header "Ship setup") whether to include `.claude/` and the `docs/` logs
-   (decisions, framing, AI usage, timelog).
+8. **What ships:** ask (AskUserQuestion, header "Ship setup") whether to include `.claude/` and the `docs/` logs
+   (decisions, framing, AI usage).
    - Recommended: yes, with the disclosure from item 5. It shows how the AI was driven, and the decision log backs up DESIGN.md.
    - Alternative: ship only `docs/decisions.md` and drop `.claude/`.
-10. **Stop the clock:** run `python3 .claude/hooks/timebox.py stop` and record the total in TIMELOG.
-11. **Package (ask first):**
-    - Commit and tag `submission-v1`.
-    - Optionally run `git archive --format=zip -o ../rebooking-copilot.zip HEAD`.
-    - Push only if the user says so.
-    - Offer a short submission email draft. Never send it.
+9. **Package (ask first):**
+   - Commit and tag `submission-v1`.
+   - Optionally run `git archive --format=zip -o ../rebooking-copilot.zip HEAD`.
+   - Push only if the user says so.
+   - Offer a short submission email draft. Never send it.

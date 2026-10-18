@@ -1,7 +1,7 @@
 export const meta = {
   name: 'review-panel',
   description: 'Pre-submission review against the brief and rubric; quick = assessor + money-safety, deep = + boundary + fresh-run; serious findings are adversarially verified',
-  whenToUse: 'Phase 5, called by /review-submission. Read-only. quick: 2-6 agents (~6 min); deep: up to 10 agents (~12-15 min).',
+  whenToUse: 'Phase 5, called by /review-submission. Read-only. quick: 2-6 agents; deep: up to 10 agents.',
   phases: [
     { title: 'Review', detail: 'independent reviewers' },
     { title: 'Verify', detail: 'skeptics try to refute serious findings (capped per reviewer)' },
@@ -10,7 +10,6 @@ export const meta = {
 
 const A = args || {}
 const DEPTH = A.depth === 'deep' ? 'deep' : 'quick'
-const REMAINING = A.remainingMinutes || 'unknown'
 const VERIFY_SEVERITIES = DEPTH === 'deep' ? ['critical', 'high'] : ['critical']
 const MAX_VERIFY_PER_REVIEWER = DEPTH === 'deep' ? 3 : 2
 
@@ -84,7 +83,7 @@ const ALL_REVIEWERS = [
     agentType: 'assessor',
     schema: ASSESSOR_SCHEMA,
     verify: false,
-    prompt: `Assess the whole submission against docs/ASSIGNMENT.md and its rubric. Remaining budget: ${REMAINING} minutes; rank improvements by score gain per minute.${NO_RERUN}`,
+    prompt: `Assess the whole submission against docs/ASSIGNMENT.md and its rubric. Rank improvements by score gain relative to effort.${NO_RERUN}`,
   },
   {
     key: 'boundary',

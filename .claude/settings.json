@@ -10,7 +10,6 @@
       "Bash(git show *)",
       "Bash(git ls-files *)",
       "Bash(jq *)",
-      "Bash(python3 .claude/hooks/timebox.py *)",
       "Bash(python3 .claude/hooks/guard.py --scan)",
       "Bash(python3 .claude/hooks/guard.py --scan *)",
       "Bash(shasum -a 256 -c .claude/fixtures.sha256)"
@@ -31,14 +30,10 @@
       {
         "matcher": "startup|resume|clear|compact",
         "hooks": [
-          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/timebox.py\" session-hook" }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/timebox.py\" prompt-hook" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/status.py\""
+          }
         ]
       }
     ],
@@ -46,7 +41,10 @@
       {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [
-          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.py\"" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.py\""
+          }
         ]
       }
     ]

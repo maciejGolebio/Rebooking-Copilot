@@ -8,7 +8,7 @@ disable-model-invocation: true
 # /frame $ARGUMENTS: problem framing and requirement-sensing
 
 This phase serves the rubric's "problem framing & requirement-sensing" and "communication &
-decision-making" dimensions. What it produces becomes DESIGN.md §1 and §7. Budget: about 20 minutes.
+decision-making" dimensions. What it produces becomes DESIGN.md §1 and §7.
 
 ## 1. Analyse
 **Quick (default), in parallel:**
@@ -17,7 +17,7 @@ decision-making" dimensions. What it produces becomes DESIGN.md §1 and §7. Bud
   Ask it for a compact result: at most 10 traps, 8 questions and 6 choices.
 - Meanwhile, build the per-PNR fact table yourself with a throwaway script in the scratchpad. Never do the numbers by hand.
 
-**Deep (`/frame deep`, about 8 minutes):** run the saved workflow `frame-problem` with the Workflow tool:
+**Deep (`/frame deep`):** run the saved workflow `frame-problem` with the Workflow tool:
 `name: "frame-problem"`, args `{"brief": "docs/ASSIGNMENT.md", "fixtures": "fixtures", "decisions": "docs/decisions.md"}`.
 If the Workflow tool isn't available, run 4 `fixture-analyst` lenses in ONE message instead (money ·
 equivalence & traveler impact · business ambiguity · production & scale).
@@ -76,7 +76,7 @@ Record each answer in `docs/decisions.md`. Anything the user marks "ask the clie
   the D-xx it affects. Put the money-definition questions at the top: cash vs credit, whose saving, the cost of a human review.
 - `docs/questions-email.md`: a short, senior-sounding email draft to the address in the brief, with 6 questions or
   fewer. Group them; make each answerable in one line; state our default so silence is fine. **Never send it.**
-  Tell the user to send it now, and that work carries on with the defaults. Don't pause the timer while waiting.
+  Tell the user to send it now, and that work carries on with the defaults.
 
 ## 5. Close
-Summarise in five lines or fewer, append a `/checkpoint` row, and offer a commit (`docs: framing`). Next step: `/design-doc`.
+Summarise in five lines or fewer and offer a commit (`docs: framing`). Next step: `/design-doc`.

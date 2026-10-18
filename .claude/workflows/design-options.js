@@ -1,7 +1,7 @@
 export const meta = {
   name: 'design-options',
-  description: 'Judge panel: 3 Rebooking Copilot architectures from different angles, scored against the rubric and the remaining timebox',
-  whenToUse: 'Phase 2, called by /design-doc options deep. Read-only, 4 agents (3 architects + judge), ~10-15 min.',
+  description: 'Judge panel: 3 Rebooking Copilot architectures from different angles, scored against the rubric',
+  whenToUse: 'Phase 2, called by /design-doc options deep. Read-only, 4 agents (3 architects + judge).',
   phases: [
     { title: 'Propose', detail: '3 solution-architect angles in parallel' },
     { title: 'Judge', detail: 'score vs rubric, pick, graft best ideas' },
@@ -11,7 +11,6 @@ export const meta = {
 const A = args || {}
 const DECISIONS = A.decisions || 'docs/decisions.md'
 const FRAMING = A.framing || 'docs/framing.md'
-const REMAINING = A.remainingMinutes || 'unknown'
 
 const STR = { type: 'string' }
 const STRS = { type: 'array', items: STR }
@@ -30,12 +29,11 @@ const OPTION_SCHEMA = {
     observability: STRS,
     autonomy: STR,
     risks: STRS,
-    buildInTimebox: STRS,
+    buildInPrototype: STRS,
     stubOrDescribe: STRS,
-    estMinutesToBuild: { type: 'number' },
     needsDecision: STRS,
   },
-  required: ['name', 'angle', 'summary', 'flow', 'llmDoes', 'deterministicDoes', 'moneySafety', 'scaleCost', 'risks', 'buildInTimebox', 'stubOrDescribe', 'estMinutesToBuild'],
+  required: ['name', 'angle', 'summary', 'flow', 'llmDoes', 'deterministicDoes', 'moneySafety', 'scaleCost', 'risks', 'buildInPrototype', 'stubOrDescribe'],
 }
 
 const SCORE = { type: 'integer', minimum: 1, maximum: 5 }
@@ -95,7 +93,7 @@ const options = await parallel(
   ANGLES.map((a) => () =>
     agent(
       `Angle: ${a.key}. ${a.brief}\n\nBinding decisions: ${DECISIONS}. Framing (if present): ${FRAMING}. ` +
-        `Remaining timebox: ${REMAINING} minutes. Propose ONE coherent architecture for this angle, separating what the prototype builds ` +
+        `Propose ONE coherent architecture for this angle, separating what the prototype builds ` +
         `now from what the design only describes. Be explicit about every LLM vs deterministic step and why.`,
       { label: `architect:${a.key}`, phase: 'Propose', schema: OPTION_SCHEMA, agentType: 'solution-architect' },
     ),
@@ -109,7 +107,7 @@ const judgement = await agent(
   `You are the hiring panel for the Rebooking Copilot take-home (brief: docs/ASSIGNMENT.md, rubric at its end). ` +
     `This is the design phase: no code exists to run, so judge the proposals only. ` +
     `Score each option 1-5 on: framing, AI/deterministic boundary, correctness & money safety, scale/cost/observability, ` +
-    `pragmatism given ${REMAINING} remaining minutes, communication. Recommend one, list ideas worth grafting from the others, ` +
+    `pragmatism (a small, honest prototype of the risky core), communication. Recommend one, list ideas worth grafting from the others, ` +
     `which rejected options deserve a "considered alternative" paragraph in DESIGN.md, and the questions the user must answer ` +
     `before committing (options + recommendation) - merge and dedupe the architects' needsDecision items into questionsForUser, ` +
     `and include the agent-shape question (deterministic pipeline + LLM explainer vs LLM orchestrating deterministic tools with the gate in code) ` +

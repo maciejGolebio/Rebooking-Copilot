@@ -7,22 +7,22 @@ disable-model-invocation: true
 
 # /slice $ARGUMENTS
 
-The whole build budget is about 75 minutes. Keep every slice thin, and keep the review cost where the risk is.
+Keep every slice thin, and spend the review effort where the risk is.
 
 ## Default plan (follow DESIGN.md if it differs)
 | Slice | Contents | Tests by | Review |
 |---|---|---|---|
-| `core` (~15 min) | typed domain, fixture loading with validation (flag bad data, never coerce silently), the Money type with a currency guard | you: small unit tests | none (covered by `decision`) |
-| `decision` (~35 min) | candidate matching, the equivalence / hard-constraint policy (versioned), net saving, thresholds, REBOOK / DO_NOT_REBOOK / NEEDS_REVIEW, confidence, rule trace | **`test-engineer` once**: a golden case per fixture PNR plus the invariants | **`money-safety-reviewer` once**, at the end |
-| `reasoner` (~25 min) | the Reasoner interface: deterministic stub, optional Claude adapter (per LLM mode), prompt file, output schema, validation, faithfulness check, fallback; CLI output to the agreed format | you | deferred to `/review-submission` |
+| `core` | typed domain, fixture loading with validation (flag bad data, never coerce silently), the Money type with a currency guard | you: small unit tests | none (covered by `decision`) |
+| `decision` | candidate matching, the equivalence / hard-constraint policy (versioned), net saving, thresholds, REBOOK / DO_NOT_REBOOK / NEEDS_REVIEW, confidence, rule trace | **`test-engineer` once**: a golden case per fixture PNR plus the invariants | **`money-safety-reviewer` once**, at the end |
+| `reasoner` | the Reasoner interface: deterministic stub, optional Claude adapter (per LLM mode), prompt file, output schema, validation, faithfulness check, fallback; CLI output to the agreed format | you | deferred to `/review-submission` |
 
 Observability: one structured log line per decision, plus counters, is enough. Describe the rest in DESIGN.md §5.
 
-## 0. Scope check (2 minutes or less)
+## 0. Scope check
 - Read the CLAUDE.md quick reference, `docs/decisions.md`, and the relevant DESIGN.md section.
 - State the slice's acceptance criteria in 3–6 bullets, each citing its D-xx.
 - If a criterion depends on an undecided business or methodology choice, run `/decide` first. Don't guess.
-- Check the `[timebox]` line. If the slice doesn't fit, ask (AskUserQuestion, header "Scope"):
+- If the slice is growing beyond the risky core, ask (AskUserQuestion, header "Scope"):
   build it thinner · stub it and describe it in DESIGN.md · skip it.
 
 ## 1. Tests first
@@ -45,4 +45,4 @@ wrong, push back, say why, and log the rejection with `/ai-log`. Those rejection
 
 ## 5. Close the loop
 Update DESIGN.md §8 (the Built/Stubbed table) plus any v0 bullet whose behaviour changed. Record new decisions.
-Append a short `/checkpoint` row. Offer a commit, `feat(<slice>): …`. The session hook counts these commits.
+Offer a commit, `feat(<slice>): …`. The session hook counts these commits.

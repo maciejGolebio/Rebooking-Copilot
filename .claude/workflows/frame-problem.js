@@ -1,7 +1,7 @@
 export const meta = {
   name: 'frame-problem',
   description: 'Multi-lens framing of the Rebooking Copilot brief and fixtures: per-PNR facts, traps, assumptions, questions, business choices',
-  whenToUse: 'Phase 1, called by /frame deep. Read-only, 5 agents (4 lenses + synthesis), ~8 min. Returns only the synthesis.',
+  whenToUse: 'Phase 1, called by /frame deep. Read-only, 5 agents (4 lenses + synthesis). Returns only the synthesis.',
   phases: [
     { title: 'Analyze', detail: '4 independent fixture-analyst lenses' },
     { title: 'Synthesize', detail: 'merge, dedupe, rank, surface conflicts' },

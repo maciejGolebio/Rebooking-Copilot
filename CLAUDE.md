@@ -12,19 +12,19 @@ The brief (scope, deliverables, rubric) is the contract: @docs/ASSIGNMENT.md
 
 Rubric: framing & requirement-sensing · architecture & AI/deterministic boundary · correctness &
 money safety · scale/cost/observability · prototype quality & pragmatism · communication &
-decision-making. **Timebox ~2–3 h.** Depth and judgment on a few things beat shallow coverage.
+decision-making. Depth and judgment on a few things beat shallow coverage.
 
-## Delivery workflow (default budget for 180 min)
-| Phase | Command | Min | Produces |
-|---|---|---|---|
-| 0 Kickoff | `/kickoff [min]` | 10 | timer, stack/method decisions, skeleton |
-| 1 Frame | `/frame [deep]` | 20 | `docs/framing.md`, product stances, open questions, email draft |
-| 2 Design v0 | `/design-doc` | 20 | chosen architecture and agent shape, DESIGN.md skeleton |
-| 3 Build | `/slice core` → `/slice decision` → `/slice reasoner` | 75 | tests → code → targeted review |
-| 4 Design v1 | `/design-doc complete` | 25 | full DESIGN.md that matches the code |
-| 5 Review + finalize | `/review-submission` → `/finalize` | 30 | verified fixes, README example output, AI note, checks |
+## Delivery workflow
+| Phase | Command | Produces |
+|---|---|---|
+| 0 Kickoff | `/kickoff` | stack/method decisions, skeleton |
+| 1 Frame | `/frame [deep]` | `docs/framing.md`, product stances, open questions, email draft |
+| 2 Design v0 | `/design-doc` | chosen architecture and agent shape, DESIGN.md skeleton |
+| 3 Build | `/slice core` → `/slice decision` → `/slice reasoner` | tests → code → targeted review |
+| 4 Design v1 | `/design-doc complete` | full DESIGN.md that matches the code |
+| 5 Review + finalize | `/review-submission` → `/finalize` | verified fixes, README example output, AI note, checks |
 
-Anytime: `/decide <topic>`, `/checkpoint`, `/ai-log`. Phase commands are user-invoked: suggest them, don't
+Anytime: `/decide <topic>`, `/ai-log`. Phase commands are user-invoked: suggest them, don't
 expect to run them yourself. Guide: `docs/AI_SETUP.md`.
 
 ## Rules (pre-set as D-00a–e in docs/decisions.md; the user may revise them at /kickoff)
@@ -52,8 +52,8 @@ expect to run them yourself. Guide: `docs/AI_SETUP.md`.
   a stated default. Subagents cannot ask the user: they return a `needsDecision` item instead.
 - When the user rejects or corrects a suggestion, or you reject a reviewer finding, log it with `/ai-log` in
   `docs/AI_USAGE_LOG.md`. That file feeds the required AI-usage note.
-- Respect the timebox. For anything outside the risky core, prefer "stub + describe in DESIGN.md" over building it.
-  Say explicitly what was cut.
+- Keep scope tight: build the risky core; for anything else prefer "stub + describe in DESIGN.md" over building it.
+  Say explicitly what was stubbed or cut.
 - Keep DESIGN.md in sync when a decision changes behaviour. Every assumption cites its `D-xx`.
 - Compute numbers with code (a script or a test), never mentally. Show inputs.
 - Commit at phase or slice boundaries, and only after the user says OK.
