@@ -249,9 +249,9 @@ The metrics, and how to tell the system isn't working:
 ## 7. Assumptions & open questions
 | # | Assumption / question | Default | Impact if wrong | Business choice? | Ref |
 |---|---|---|---|---|---|
-| 1 | How a residual comes back | Refundable → cash, non-refundable → credit; only cash counts | QX7T2A becomes REBOOK | yes | D-10, Q1 |
+| 1 | How a residual comes back | **Provisional:** refundable → cash, non-refundable → credit; only cash counts | QX7T2A becomes REBOOK | yes | D-10, Q1 |
 | 2 | Whose saving it is, and the cost of a review | The payer; max(25, 5%) | The threshold moves | yes | D-13, Q2 |
-| 3 | The fee basis | The existing ticket's fee × passengers | HB6W9E/OF-5002: −40 ↔ +110 (blocked anyway on bags) | yes | D-18, Q3 |
+| 3 | The fee basis | **Provisional:** the existing ticket's fee × passengers | HB6W9E/OF-5002: −40 ↔ +110 (blocked anyway on bags) | yes | D-18, Q3 |
 | 4 | Exchanging across currency or point of sale | Allowed, with a mock executable FX rate | RT5K8B may not be achievable | yes | D-12, D-27, Q4 |
 | 5 | Acceptable downgrades | Only fewer bags is ruled out; the rest go to review | The eligible set is too wide or too narrow | yes | D-11, Q5 |
 | 6 | Volume and reshop frequency | The scenarios in §5 | The sizing | yes | Q6 |
@@ -279,7 +279,34 @@ The metrics, and how to tell the system isn't working:
 5. Add multi-segment itineraries.
 
 ## 9. AI usage note
-_Written in `/finalize` from [docs/AI_USAGE_LOG.md](docs/AI_USAGE_LOG.md)._
+**Tools.** Claude Code in the desktop app with Claude Opus 5.5. Subagents (Sonnet or Opus) did fixture analysis,
+architecture options, test-first test writing and independent reviews.
+
+**How I drove it.**
+- **Phases.** I ran it phase by phase: kickoff → framing → design options → three test-first build slices → the full
+  design → two review rounds → finalize.
+- **Decisions stayed with me.** At each phase it asked me the product, methodology and technology questions instead of
+  deciding them, and the answers are in [docs/decisions.md](docs/decisions.md) with who decided each.
+- **Reviews.** Independent review agents checked money safety and the LLM boundary, plus an assessor's read. Every
+  finding was reproduced with a script before it was fixed.
+- **No live model run:** it costs money, so the Claude path is tested offline.
+
+**Suggestions I rejected or corrected** (the full list, with reasons, is in [docs/AI_USAGE_LOG.md](docs/AI_USAGE_LOG.md)):
+- **Hard blocks.** It proposed four: downgrade, lost refundability, fewer bags, carrier change or added stop. I kept
+  only fewer bags. Blocking everything would leave the agent nothing to judge, so the rest became review-level
+  trade-offs with confidence capped at MEDIUM (D-11, D-16).
+- **Architecture.** It recommended a pipeline with one structured LLM call. I chose an agent over deterministic tools,
+  because the brief asks for an AI agent and code still owns every number and the eligible set (D-19).
+- **Dataclasses next to pydantic.** It used plain dataclasses for the loader's results. I asked what the point was,
+  since those results reach the JSON output and its schema; they became frozen pydantic models.
+- **Price anomalies.** A reviewer showed the agent could approve a suspiciously cheap fare at MEDIUM. I made those
+  review-only: a possible feed error isn't a trade-off for a model to weigh (D-40).
+- **Its own overclaims.** The first full draft of this document said I had already emailed the assessors, and it
+  described the rationale check as stronger than it was. Both were corrected (§1, §3).
+
+**Disclosure.** The `.claude/` setup (phase skills, knowledge checklists, review agents and hooks) was prepared with AI
+before the implementation work. Two independent review agents then checked it, and their findings were applied. The
+checklists are AI-drafted. See [docs/AI_SETUP.md](docs/AI_SETUP.md).
 
 ## 10. Architecture decision records
 The architecture-significant decisions are in [`docs/adr/`](docs/adr/README.md). Each one has a **"Depends on (team & context)"**
