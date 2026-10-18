@@ -33,44 +33,40 @@ Rules:
   OFFER_DATA_REJECTED: a REBOOK drops one confidence band, a DO_NOT_REBOOK becomes NEEDS_REVIEW. An unexpected error
   while evaluating one booking → NEEDS_REVIEW with EVALUATION_ERROR for that booking only; the run continues.
   `as_of` must be timezone-aware and not earlier than captured_at (a caller error, raised as ValueError).
+- Claude mode (`reasoner=`, D-19/D-21): after the ledger, bookings whose seat-feasible eligible set has a review-level
+  offer or two or more offers go to the agent. Its answer is re-validated here (D-07, D-16, D-22, D-25): the offer
+  must be in that set, REBOOK must pass the settlement gate, every number in the rationale must appear in what the
+  model saw; a review-level REBOOK is capped at MEDIUM and the agent's ceiling can only lower confidence; declining
+  a clean saving escalates to NEEDS_REVIEW. Anything else falls back to the deterministic recommendation, with the
+  reason recorded. Determinism is claimed for stub mode only (D-23).
 """
 
 import hashlib
 import json
 from datetime import datetime
 from decimal import Decimal
-from enum import StrEnum
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime
 
 from rebooking_copilot import __version__
+from rebooking_copilot.base import OutputModel
 from rebooking_copilot.fx import FxProvider, MockFxProvider
 from rebooking_copilot.loader import FareSnapshot, Issue, PnrLoad, RejectedOffer, RejectedPnr
 from rebooking_copilot.models import Offer, Pnr
 from rebooking_copilot.money import Money, in_money_context, money_context
+from rebooking_copilot.outcome import BANDS, Action, Confidence, lowest
 from rebooking_copilot.policy import (
-    DEFAULT_POLICY, Assessment, Breakdown, PolicyConfig, Reason, RuleResult, Settlement, SettlementPolicy, Tier, assess,
-    find_candidates, ordered,
+    DEFAULT_POLICY, REVIEW_LEVEL_REASONS, Assessment, Breakdown, PolicyConfig, Reason, RuleResult, Settlement,
+    SettlementPolicy, Tier, assess, find_candidates, ordered,
 )
+from rebooking_copilot.rationale import explain
+from rebooking_copilot.reasoning import AgentCase, AgentDecision, AgentRun, Reasoner, is_faithful, needs_agent
 
 REASONER_ID = "stub"
+__all__ = ["Action", "Confidence", "Recommendation", "REASONER_ID", "evaluate"]
 
 
-class Action(StrEnum):
-    REBOOK = "REBOOK"
-    DO_NOT_REBOOK = "DO_NOT_REBOOK"
-    NEEDS_REVIEW = "NEEDS_REVIEW"
-
-
-class Confidence(StrEnum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
-
-
-class Recommendation(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
+class Recommendation(OutputModel):
     index: int  # position of the booking in the input file
     pnr: str | None
     action: Action
@@ -88,10 +84,13 @@ class Recommendation(BaseModel):
     expires_at: AwareDatetime
     fingerprint: str
     error: str | None = None  # only for EVALUATION_ERROR
+    rationale: str = ""  # for the human agent: a template (stub) or the agent's text (Claude mode)
+    prompt_version: str | None = None  # Claude mode only
+    fallback_reason: str | None = None  # why a routed booking fell back to the deterministic decision
+    agent_trace: tuple[str, ...] = ()  # tool calls of the agent run, in order
 
 
 NON_MONEY_BLOCKS = frozenset({Reason.FEWER_BAGS, Reason.SCHEDULE_OUTSIDE_WINDOW, Reason.ARRIVES_LATER_DAY, Reason.INSUFFICIENT_SEATS, Reason.DEPARTS_TOO_SOON})
-_BANDS = (Confidence.HIGH, Confidence.MEDIUM, Confidence.LOW)
 
 
 @in_money_context
@@ -102,10 +101,11 @@ def evaluate(
     policy: PolicyConfig = DEFAULT_POLICY,
     fx: FxProvider | None = None,
     as_of: datetime | None = None,
+    reasoner: Reasoner | None = None,
 ) -> tuple[Recommendation, ...]:
     """One recommendation per input booking (accepted and rejected), ordered by input index.
 
-    `fx` defaults to MockFxProvider(); `as_of` defaults to snapshot.captured_at.
+    `fx` defaults to MockFxProvider(); `as_of` defaults to snapshot.captured_at; `reasoner=None` is stub mode.
     """
     fx = MockFxProvider() if fx is None else fx
     as_of = snapshot.captured_at if as_of is None else as_of
@@ -131,15 +131,20 @@ def evaluate(
 
     chosen, contended = _allocate_seats(cases, policy)
 
+    final: dict[int, tuple[Pnr, tuple[Offer, ...], list[Assessment], tuple[RejectedOffer, ...]]] = {}
     for index, (pnr, offers, assessments) in cases.items():
         try:
             assessments = [_mark_contended(a) if a.offer_id in contended[index] else a for a in assessments]
             lost = _lost_offers(pnr, snapshot.rejected)
             recommendations[index] = _recommend(index, pnr, offers, assessments, chosen[index], lost, stale=stale, **context)
+            final[index] = (pnr, offers, assessments, lost)
         except Exception as exc:
             recommendations[index] = _errored(index, pnr.pnr, exc, **context)
     for rejected in bookings.rejected:
         recommendations[rejected.index] = _rejected(rejected, **context)
+    recommendations = {i: r.model_copy(update={"rationale": explain(r)}) for i, r in recommendations.items()}
+    if reasoner is not None:
+        _agent_pass(recommendations, final, chosen, reasoner, stale=stale, **context)
     return tuple(recommendations[i] for i in range(total))
 
 
@@ -160,9 +165,13 @@ def _ranked(assessments: list[Assessment]) -> list[Assessment]:
     )
 
 
+def _credit_blocked(a: Assessment, policy: PolicyConfig) -> bool:
+    """D-10/D-30: under cash_only a credit saving is reported but can never become REBOOK."""
+    return a.breakdown.settlement is Settlement.CREDIT and policy.settlement_policy is SettlementPolicy.CASH_ONLY
+
+
 def _would_rebook(a: Assessment, policy: PolicyConfig) -> bool:
-    credit_not_counted = a.breakdown.settlement is Settlement.CREDIT and policy.settlement_policy is SettlementPolicy.CASH_ONLY
-    return a.tier is Tier.CLEAN and not credit_not_counted
+    return a.tier is Tier.CLEAN and not _credit_blocked(a, policy)
 
 
 def _saving_in_offer_currency(a: Assessment) -> Decimal:
@@ -269,9 +278,14 @@ def _recommend(index, pnr: Pnr, offers, assessments: list[Assessment], chosen: A
     rec = _decide(index, pnr, offers, assessments, chosen, lost, **context)
     if not lost:
         return rec
+    return _with_lost(rec)
+
+
+def _with_lost(rec: Recommendation) -> Recommendation:
+    """D-35: a rejected offer on the route means the picture is incomplete."""
     reasons = ordered((*rec.reasons, Reason.OFFER_DATA_REJECTED))
     if rec.action is Action.REBOOK:
-        return rec.model_copy(update={"reasons": reasons, "confidence": _BANDS[min(_BANDS.index(rec.confidence) + 1, 2)]})
+        return rec.model_copy(update={"reasons": reasons, "confidence": BANDS[min(BANDS.index(rec.confidence) + 1, 2)]})
     return rec.model_copy(update={"action": Action.NEEDS_REVIEW, "confidence": Confidence.LOW, "reasons": reasons})
 
 
@@ -314,7 +328,7 @@ def _decide(index, pnr: Pnr, offers, assessments: list[Assessment], chosen: Asse
             notes.append(Reason.SAVING_AS_CREDIT)
         if _would_rebook(chosen, policy):
             drops = (bd.fx is not None) + (bd.counted_net_saving.amount < policy.confidence_margin_multiple * bd.threshold.amount) + stale
-            action, confidence = Action.REBOOK, _BANDS[min(drops, 2)]
+            action, confidence = Action.REBOOK, BANDS[min(drops, 2)]
         else:
             action, confidence = Action.NEEDS_REVIEW, Confidence.LOW
         reasons = ordered(notes)
@@ -344,10 +358,128 @@ def _errored(index: int, locator: str | None, exc: Exception, *, policy, as_of, 
     )
 
 
-def _fingerprint(*, policy: PolicyConfig, as_of: datetime, captured_at: datetime, **parts) -> str:
+def _fingerprint(*, policy: PolicyConfig, as_of: datetime, captured_at: datetime, reasoner: str = REASONER_ID, **parts) -> str:
     """D-32: the booking's own inputs only (booking, candidate and rejected offers, FX quotes used, policy, clocks, engine)."""
     payload = {
         **parts, "policy": policy.model_dump(mode="json"), "as_of": as_of.isoformat(), "captured_at": captured_at.isoformat(),
-        "engine": __version__, "reasoner": REASONER_ID,
+        "engine": __version__, "reasoner": reasoner,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+# --- Claude mode: routing and the validator (D-07, D-16, D-21, D-22, D-25) -----------------------------------------
+
+def _agent_pass(recommendations, final, chosen, reasoner: Reasoner, *, stale: bool, policy, as_of, expires_at, captured_at) -> None:
+    """Route eligible bookings to the agent, in input order, over the seats the ledger left (no overselling)."""
+    held_by = {i: a.offer_id for i, a in chosen.items() if a is not None}
+    seats: dict[str, int] = {}
+    used: dict[str, int] = {}
+    for i, (pnr, _, assessments, _) in final.items():
+        for a in assessments:
+            seats.setdefault(a.offer_id, a.seats_available)
+        if i in held_by:
+            used[held_by[i]] = used.get(held_by[i], 0) + pnr.passengers
+
+    for index in sorted(final):
+        pnr, offers, assessments, lost = final[index]
+        held = held_by.get(index)
+        eligible = _ranked(assessments)
+        feasible = [a for a in eligible if a.offer_id == held or seats[a.offer_id] - used.get(a.offer_id, 0) >= pnr.passengers]
+        if not needs_agent(feasible):
+            continue
+        by_id = {o.offer_id: o for o in offers}
+        feasible_ids = {a.offer_id for a in feasible}
+        case = AgentCase(
+            pnr=pnr, offers=tuple(by_id[a.offer_id] for a in feasible), assessments=tuple(feasible),
+            seat_blocked=frozenset(a.offer_id for a in eligible if a.offer_id not in feasible_ids), policy=policy,
+        )
+        try:
+            run = reasoner.run(case)
+        except Exception as exc:  # a reasoner must never take the run down
+            run = AgentRun(failure=f"reasoner error: {type(exc).__name__}: {exc}")
+        rec = _apply_agent(
+            recommendations[index], run, case, reasoner, offers=offers, assessments=assessments, lost=lost,
+            stale=stale, policy=policy, as_of=as_of, captured_at=captured_at,
+        )
+        if rec.action is Action.REBOOK and rec.chosen_offer_id != held:
+            used[rec.chosen_offer_id] = used.get(rec.chosen_offer_id, 0) + pnr.passengers
+            if held is not None:
+                used[held] -= pnr.passengers
+        recommendations[index] = rec
+
+
+def _apply_agent(rec: Recommendation, run: AgentRun, case: AgentCase, reasoner: Reasoner, *, offers, assessments, lost,
+                 stale: bool, policy: PolicyConfig, as_of, captured_at) -> Recommendation:
+    """Re-validate the agent's answer against the code-built set; any violation falls back to `rec`."""
+
+    def fallback(reason: str) -> Recommendation:
+        return rec.model_copy(update={"fallback_reason": reason, "agent_trace": run.trace})
+
+    if run.failure is not None or run.answer is None:
+        return fallback(run.failure or "no answer")
+    answer = run.answer
+    feasible = {a.offer_id: a for a in case.assessments}
+    chosen_id = answer.chosen_offer_id
+    if chosen_id is not None and chosen_id not in feasible:
+        if chosen_id in case.seat_blocked:
+            return fallback(f"no seats left on {chosen_id} after other bookings in this run")
+        return fallback(f"{chosen_id} is not in the eligible set")
+    if answer.decision is AgentDecision.REBOOK and chosen_id is None:
+        return fallback("REBOOK needs an offer from the eligible set")
+    chosen = feasible.get(chosen_id)
+    if answer.decision is AgentDecision.REBOOK and _credit_blocked(chosen, policy):
+        return fallback(f"policy forbids REBOOK on {chosen_id}: the saving would come back as credit under cash_only")
+    if not is_faithful(answer.rationale, run.seen_text):
+        return fallback("unfaithful rationale: it states numbers that are not in the facts or tool results")
+
+    ranked = list(case.assessments)  # best first
+    best_clean = next((a for a in ranked if _would_rebook(a, policy)), None)
+    rationale = answer.rationale
+    if answer.decision is AgentDecision.REBOOK:
+        bd = chosen.breakdown
+        drops = (bd.fx is not None) + (bd.counted_net_saving.amount < policy.confidence_margin_multiple * bd.threshold.amount) + stale
+        confidence = BANDS[min(drops, 2)]
+        if chosen.tier is Tier.REVIEW_LEVEL:
+            confidence = lowest(confidence, Confidence.MEDIUM)  # D-16
+        confidence = lowest(confidence, answer.confidence_ceiling)  # D-17: the model can only lower it
+        notes = [Reason.FX_CONVERTED] if bd.fx is not None else []
+        if bd.settlement is Settlement.CREDIT:
+            notes.append(Reason.SAVING_AS_CREDIT)
+        reasons = ordered((*(r for r in chosen.reasons if r in REVIEW_LEVEL_REASONS), *notes))
+        update = dict(action=Action.REBOOK, chosen_offer_id=chosen.offer_id, estimated_net_saving=bd.counted_net_saving,
+                      breakdown=bd, confidence=confidence, reasons=reasons)
+    elif best_clean is not None:  # D-22: declining a clean saving the policy approves → a human decides
+        bd = best_clean.breakdown
+        update = dict(action=Action.NEEDS_REVIEW, chosen_offer_id=best_clean.offer_id, estimated_net_saving=bd.counted_net_saving,
+                      breakdown=bd, confidence=Confidence.LOW, reasons=ordered((*best_clean.reasons, Reason.LLM_DISAGREES_WITH_POLICY)))
+    elif answer.decision is AgentDecision.NEEDS_REVIEW and chosen is not None:
+        bd = chosen.breakdown
+        notes = [Reason.FX_CONVERTED] if bd.fx is not None else []
+        update = dict(action=Action.NEEDS_REVIEW, chosen_offer_id=chosen.offer_id, estimated_net_saving=bd.counted_net_saving,
+                      breakdown=bd, confidence=Confidence.LOW, reasons=ordered((*chosen.reasons, *notes)))
+    else:
+        reasons = tuple(dict.fromkeys(r for a in ranked for r in a.reasons))
+        if answer.decision is AgentDecision.NEEDS_REVIEW:
+            action, confidence = Action.NEEDS_REVIEW, Confidence.LOW
+        else:
+            settled = all(a.breakdown.net_saving.amount <= 0 or set(a.reasons) & NON_MONEY_BLOCKS for a in ranked)
+            action, confidence = Action.DO_NOT_REBOOK, Confidence.HIGH if settled else Confidence.MEDIUM
+        update = dict(action=action, chosen_offer_id=None, estimated_net_saving=None, breakdown=None, confidence=confidence, reasons=reasons)
+
+    alternatives = tuple(a.offer_id for a in ranked if update["chosen_offer_id"] is not None and a.offer_id != update["chosen_offer_id"])
+    fingerprint = _fingerprint(
+        booking=case.pnr.model_dump(mode="json"),
+        candidates=[o.model_dump(mode="json") for o in offers],
+        rejected_offers=[r.model_dump(mode="json") for r in lost],
+        fx=[a.breakdown.fx.model_dump(mode="json") for a in assessments if a.breakdown is not None and a.breakdown.fx is not None],
+        prompt=reasoner.prompt_version, policy=policy, as_of=as_of, captured_at=captured_at, reasoner=reasoner.id,
+    )
+    new = rec.model_copy(update={
+        **update, "alternatives": alternatives, "reasoner": reasoner.id, "prompt_version": reasoner.prompt_version,
+        "agent_trace": run.trace, "fallback_reason": None, "fingerprint": fingerprint,
+    })
+    if Reason.LLM_DISAGREES_WITH_POLICY in new.reasons:
+        rationale = f"{explain(new)} The agent's view: {answer.rationale}"
+    if lost:
+        new = _with_lost(new)
+    return new.model_copy(update={"rationale": rationale})

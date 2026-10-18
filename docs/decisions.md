@@ -52,6 +52,10 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-33 | Lead time | An offer is ineligible (DEPARTS_TOO_SOON) unless its earliest possible departure (local time read as UTC+14) is ≥ as_of + 24 h | user | accepted |
 | D-34 | Price anomaly | An offer more than 60% cheaper than the paid fare per passenger (in the ticket currency) is review-level (PRICE_ANOMALY) | user | accepted |
 | D-35 | Review hardening | Duplicate ids rejected; offer price > 0; FX quotes validated; per-booking isolation; rejected offers on the route → OFFER_DATA_REJECTED; freed seats re-offered; bounded amounts in a fixed Decimal context; fingerprint adds captured_at + engine | default | accepted |
+| D-36 | Model and effort | `claude-sonnet-5-5` at effort `medium` (set explicitly); refusal fallback on by default ([ADR-0009](adr/0009-claude-mode-runtime.md)) | user (fallback: default) | accepted |
+| D-37 | Claude-mode switch | `--reasoner claude` or `REBOOKING_REASONER=claude`; the flag wins; no credentials → per-booking fallback, announced | user | accepted |
+| D-38 | Agent loop | Explicit loop on LangChain primitives (`ChatAnthropic.bind_tools`, tool_choice auto, strict tools), 6 turns / 30 s | user | accepted |
+| D-39 | Validator details | Agent works on the post-ledger seat-feasible set; any failed check → full deterministic fallback; veto shows the best clean offer; agent REBOOK moves the seat | default | accepted |
 
 ## Entries
 
@@ -341,10 +345,46 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
   misquote (e.g. 0.5 instead of 0.9276) would still produce a REBOOK. In production, cross-check two sources.
 - **Decided by:** default · **Status:** accepted
 
+### D-36: Model and effort (2026-10-18)
+- **Context:** checked against the current Claude API reference. Sonnet 5.5 rejects forced tool choice and non-default
+  sampling; thinking can't be off; effort defaults to `high`.
+- **Options:** Opus 5.5 (the API reference's default; recommended) · Sonnet 5.5 · Haiku 5.5; effort low · medium · high
+- **Decision:** `claude-sonnet-5-5` at `output_config.effort = "medium"`. The server-side refusal fallback
+  (`fallbacks: "default"`) is on by default, per the API guidance. If the whole chain refuses, the validator falls back.
+- **Decided by:** user (model, effort) and default (refusal fallback) · **Status:** accepted · [ADR-0009](adr/0009-claude-mode-runtime.md)
+
+### D-37: Claude-mode switch (2026-10-18)
+- **Options:** a `--reasoner` flag · the `REBOOKING_REASONER` env var · both
+- **Decision:** both; the flag overrides the env var. Credentials resolve the SDK's normal way. Without them, or without
+  the `llm` extra, the CLI says so, and every routed booking falls back with the reason recorded.
+- **Decided by:** user · **Status:** accepted
+
+### D-38: Agent loop (2026-10-18), refines D-20
+- **Options:** an explicit loop on LangChain primitives (recommended) · LangChain `create_agent` · the Anthropic SDK Tool Runner
+- **Decision:**
+  - an explicit, append-only loop: `ChatAnthropic.bind_tools(tool_choice="auto", strict=True)`;
+  - four read-only, id-only tools plus `submit_recommendation`;
+  - a budget of 6 turns and 30 s;
+  - only `langchain-anthropic` and `langchain-core`.
+- **Decided by:** user · **Status:** accepted
+
+### D-39: Validator details (2026-10-18)
+- The agent sees the booking's eligible offers that are still seat-feasible after the ledger.
+- Bookings are processed in input order. A REBOOK onto a different offer moves the seat, so later bookings see what is left.
+- Checks, in order:
+  1. the offer is in the set;
+  2. REBOOK names an offer;
+  3. REBOOK passes the settlement gate;
+  4. the rationale is faithful.
+
+  Any failure means a full deterministic fallback, with the reason recorded.
+- The D-22 veto shows the best clean offer and its saving, and the rationale prefixes the template to the agent's view.
+- **Decided by:** default · **Status:** accepted
+
 <!--
 Entry format:
 
-### D-36: <topic> (YYYY-MM-DD)
+### D-40: <topic> (YYYY-MM-DD)
 - **Context:** 1–2 lines; cite PNRs or fixture facts where relevant.
 - **Options:** A) …  B) …  C) …
 - **Decision:** …

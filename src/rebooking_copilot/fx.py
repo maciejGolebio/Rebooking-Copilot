@@ -12,7 +12,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Protocol
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, Field
+
+from rebooking_copilot.base import OutputModel
 
 from rebooking_copilot.money import Amount, CurrencyCode, CurrencyMismatchError, Money, money_context
 
@@ -21,10 +23,8 @@ MOCK_RATES: dict[tuple[str, str], Decimal] = {("USD", "EUR"): Decimal("0.9276")}
 MOCK_SOURCE = "mock-fx-v1"
 
 
-class FxQuote(BaseModel):
+class FxQuote(OutputModel):
     """`rate` = units of `to_currency` per 1 unit of `from_currency`."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     from_currency: CurrencyCode
     to_currency: CurrencyCode

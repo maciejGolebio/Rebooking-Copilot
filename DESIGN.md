@@ -69,9 +69,11 @@ flowchart TD
 | Rationale text | LLM (template in stub mode) | Language work | Invented numbers → faithfulness check → template |
 | Final gate: offer ∈ E, tier cap, settlement and threshold | Code | D-07 | Any failure → deterministic fallback, reason recorded |
 | Confidence | Code | Self-reported confidence isn't trustworthy | The LLM can only lower it |
-- **Prompt:** `prompts/rebooking_agent_v1.md` (versioned; built in `/slice reasoner`). Inputs are a delimited FACTS block plus tool
-  results, both treated as untrusted data. The submit schema has no numeric fields.
-- **Model, effort, structured-output mechanism:** chosen in `/slice reasoner` against the current API reference (D-25).
+- **Prompt:** [`src/rebooking_copilot/prompts/rebooking_agent_v1.md`](src/rebooking_copilot/prompts/rebooking_agent_v1.md), recorded as `promptVersion`.
+  Inputs are a delimited FACTS block plus tool results, both treated as untrusted data. `submit_recommendation` has no numeric fields.
+- **Runtime** (ADR-0009): `claude-sonnet-5-5` at effort `medium`. An explicit LangChain loop with `tool_choice: auto` and strict tools,
+  since forced tool choice is a 400 on Sonnet 5.5. Budget: 6 turns and 30 s. Refusal fallback on. Switch: `--reasoner claude` / `REBOOKING_REASONER`.
+- **Validator** (D-39): offer in the seat-feasible set → settlement gate → faithfulness → confidence cap. Any failure → deterministic fallback, reason recorded.
 
 ## 4. Correctness & money safety
 - **Money:** `Decimal` amounts tagged with a currency; cross-currency arithmetic raises; per-passenger and total amounts are separate fields (D-00b).
@@ -143,7 +145,7 @@ flowchart TD
 |---|---|---|
 | Typed models, Money, validating loader | **Built** (`/slice core`) | Money properties (hypothesis), per-record rejection, CLI loads fixtures |
 | Matching, policy tiers + rule trace, money breakdown, FX provider (mock), seat ledger, confidence, fingerprint, expiry | **Built** (`/slice decision`) | 186 spec-derived tests: golden per fixture booking, invariants (hypothesis), seat contention, FX, settlement variants |
-| LangChain agent, tools, validator, prompt, fallback | Built (Claude mode optional) | `/slice reasoner` |
+| LangChain agent, tools, validator, prompt, fallback, stub rationales, `recommendations.json` + schema | **Built** (`/slice reasoner`) | 41 tests incl. scripted fake-agent adversarial cases; real request payload verified offline; no live API call made |
 | Tests: golden, invariants, adversarial fake agent, multi-offer cases | Built | `test-engineer` |
 | Priority score, scheduler, queues, batch calls, caching, shadow mode | Described | §5 |
 | FX rate plausibility against a reference rate | **Not done** (known limitation) | A plausible-looking misquote still passes; production cross-checks two sources (D-35) |

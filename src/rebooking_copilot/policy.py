@@ -32,7 +32,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from rebooking_copilot.base import OutputModel
 
 from rebooking_copilot.fx import FxProvider, FxQuote, FxQuoteInvalidError, FxUnavailableError, convert
 from rebooking_copilot.models import Cabin, Offer, Pnr
@@ -90,6 +90,7 @@ class Reason(StrEnum):
     UNSUPPORTED_ITINERARY = "UNSUPPORTED_ITINERARY"
     OFFER_DATA_REJECTED = "OFFER_DATA_REJECTED"  # a matching offer was rejected as bad data: the picture is incomplete
     EVALUATION_ERROR = "EVALUATION_ERROR"  # unexpected failure while evaluating this booking; abstain
+    LLM_DISAGREES_WITH_POLICY = "LLM_DISAGREES_WITH_POLICY"  # the agent declined a clean saving the policy approves (D-22)
 
 
 HARD_BLOCKS = frozenset({
@@ -102,8 +103,7 @@ REVIEW_LEVEL_REASONS = frozenset({
 })
 
 
-class PolicyConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+class PolicyConfig(OutputModel):
 
     version: str = "v1"
     min_net_absolute: Decimal = Decimal("25")
@@ -121,10 +121,8 @@ class PolicyConfig(BaseModel):
 DEFAULT_POLICY = PolicyConfig()
 
 
-class Breakdown(BaseModel):
+class Breakdown(OutputModel):
     """Every number in a recommendation comes from here; all amounts in the ticket's currency unless named otherwise."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     passengers: int
     paid_per_passenger: Money
@@ -139,16 +137,14 @@ class Breakdown(BaseModel):
     threshold: Money
 
 
-class RuleResult(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+class RuleResult(OutputModel):
 
     rule: str
     passed: bool
     detail: str
 
 
-class Assessment(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+class Assessment(OutputModel):
 
     offer_id: str
     tier: Tier

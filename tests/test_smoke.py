@@ -16,8 +16,8 @@ def test_fixtures_parse():
     assert fares["capturedAt"]
 
 
-def test_cli_runs_on_fixtures(capsys):
-    code = main(["--pnrs", str(FIXTURES / "pnrs.json"), "--fares", str(FIXTURES / "fares_feed.json")])
+def test_cli_runs_on_fixtures(tmp_path, capsys):
+    code = main(["--pnrs", str(FIXTURES / "pnrs.json"), "--fares", str(FIXTURES / "fares_feed.json"), "--out", str(tmp_path / "r.json")])
     out = capsys.readouterr().out
     assert code == 0
     assert "Loaded 5 bookings (0 rejected) and 6 offers (0 rejected)" in out

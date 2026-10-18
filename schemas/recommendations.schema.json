@@ -1,0 +1,584 @@
+{
+  "$defs": {
+    "Action": {
+      "enum": [
+        "REBOOK",
+        "DO_NOT_REBOOK",
+        "NEEDS_REVIEW"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "Assessment": {
+      "additionalProperties": false,
+      "properties": {
+        "breakdown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Breakdown"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offerId": {
+          "title": "Offerid",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/Reason"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "ruleTrace": {
+          "items": {
+            "$ref": "#/$defs/RuleResult"
+          },
+          "title": "Ruletrace",
+          "type": "array"
+        },
+        "scheduleShiftMinutes": {
+          "title": "Scheduleshiftminutes",
+          "type": "integer"
+        },
+        "seatsAvailable": {
+          "title": "Seatsavailable",
+          "type": "integer"
+        },
+        "tier": {
+          "$ref": "#/$defs/Tier"
+        }
+      },
+      "required": [
+        "offerId",
+        "tier",
+        "reasons",
+        "breakdown",
+        "ruleTrace",
+        "scheduleShiftMinutes",
+        "seatsAvailable"
+      ],
+      "title": "Assessment",
+      "type": "object"
+    },
+    "Breakdown": {
+      "additionalProperties": false,
+      "description": "Every number in a recommendation comes from here; all amounts in the ticket's currency unless named otherwise.",
+      "properties": {
+        "changeFees": {
+          "$ref": "#/$defs/Money"
+        },
+        "countedNetSaving": {
+          "$ref": "#/$defs/Money"
+        },
+        "fx": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FxQuote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grossSaving": {
+          "$ref": "#/$defs/Money"
+        },
+        "netSaving": {
+          "$ref": "#/$defs/Money"
+        },
+        "offerPricePerPassenger": {
+          "$ref": "#/$defs/Money"
+        },
+        "offerPricePerPassengerInTicketCurrency": {
+          "$ref": "#/$defs/Money"
+        },
+        "paidPerPassenger": {
+          "$ref": "#/$defs/Money"
+        },
+        "passengers": {
+          "title": "Passengers",
+          "type": "integer"
+        },
+        "settlement": {
+          "$ref": "#/$defs/Settlement"
+        },
+        "threshold": {
+          "$ref": "#/$defs/Money"
+        }
+      },
+      "required": [
+        "passengers",
+        "paidPerPassenger",
+        "offerPricePerPassenger",
+        "offerPricePerPassengerInTicketCurrency",
+        "fx",
+        "grossSaving",
+        "changeFees",
+        "netSaving",
+        "settlement",
+        "countedNetSaving",
+        "threshold"
+      ],
+      "title": "Breakdown",
+      "type": "object"
+    },
+    "Confidence": {
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH"
+      ],
+      "title": "Confidence",
+      "type": "string"
+    },
+    "FxQuote": {
+      "additionalProperties": false,
+      "description": "`rate` = units of `to_currency` per 1 unit of `from_currency`.",
+      "properties": {
+        "asOf": {
+          "format": "date-time",
+          "title": "Asof",
+          "type": "string"
+        },
+        "fromCurrency": {
+          "title": "Fromcurrency",
+          "type": "string"
+        },
+        "rate": {
+          "gt": 0,
+          "title": "Rate",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "toCurrency": {
+          "title": "Tocurrency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fromCurrency",
+        "toCurrency",
+        "rate",
+        "asOf",
+        "source"
+      ],
+      "title": "FxQuote",
+      "type": "object"
+    },
+    "Issue": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/IssueCode"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "Issue",
+      "type": "object"
+    },
+    "IssueCode": {
+      "enum": [
+        "DATA_INVALID",
+        "DATA_INCONSISTENT",
+        "UNSUPPORTED_ITINERARY"
+      ],
+      "title": "IssueCode",
+      "type": "string"
+    },
+    "Money": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "title": "Amount",
+          "type": "string"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount",
+        "currency"
+      ],
+      "title": "Money",
+      "type": "object"
+    },
+    "PolicyConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "confidenceMarginMultiple": {
+          "default": "2",
+          "title": "Confidencemarginmultiple",
+          "type": "string"
+        },
+        "creditDiscountFactor": {
+          "default": "0.70",
+          "title": "Creditdiscountfactor",
+          "type": "string"
+        },
+        "maxPlausibleDiscount": {
+          "default": "0.60",
+          "title": "Maxplausiblediscount",
+          "type": "string"
+        },
+        "maxUtcOffset": {
+          "default": "PT14H",
+          "format": "duration",
+          "title": "Maxutcoffset",
+          "type": "string"
+        },
+        "minLeadTime": {
+          "default": "P1D",
+          "format": "duration",
+          "title": "Minleadtime",
+          "type": "string"
+        },
+        "minNetAbsolute": {
+          "default": "25",
+          "title": "Minnetabsolute",
+          "type": "string"
+        },
+        "minNetFraction": {
+          "default": "0.05",
+          "title": "Minnetfraction",
+          "type": "string"
+        },
+        "reshopInterval": {
+          "default": "P1D",
+          "format": "duration",
+          "title": "Reshopinterval",
+          "type": "string"
+        },
+        "scheduleWindow": {
+          "default": "PT1H",
+          "format": "duration",
+          "title": "Schedulewindow",
+          "type": "string"
+        },
+        "settlementPolicy": {
+          "$ref": "#/$defs/SettlementPolicy",
+          "default": "cash_only"
+        },
+        "version": {
+          "default": "v1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "title": "PolicyConfig",
+      "type": "object"
+    },
+    "Reason": {
+      "enum": [
+        "FEWER_BAGS",
+        "SCHEDULE_OUTSIDE_WINDOW",
+        "ARRIVES_LATER_DAY",
+        "NET_SAVING_BELOW_THRESHOLD",
+        "INSUFFICIENT_SEATS",
+        "SEAT_CONTENTION",
+        "CURRENCY_MISMATCH_NO_FX",
+        "DEPARTS_TOO_SOON",
+        "CABIN_DOWNGRADE",
+        "REFUNDABILITY_LOST",
+        "CARRIER_CHANGE",
+        "ADDED_STOP",
+        "DIFFERENT_FLIGHT",
+        "PRICE_ANOMALY",
+        "FX_CONVERTED",
+        "SAVING_AS_CREDIT",
+        "NO_CANDIDATES",
+        "DATA_INVALID",
+        "DATA_INCONSISTENT",
+        "UNSUPPORTED_ITINERARY",
+        "OFFER_DATA_REJECTED",
+        "EVALUATION_ERROR",
+        "LLM_DISAGREES_WITH_POLICY"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "Recommendation": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "agentTrace": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Agenttrace",
+          "type": "array"
+        },
+        "alternatives": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alternatives",
+          "type": "array"
+        },
+        "asOf": {
+          "format": "date-time",
+          "title": "Asof",
+          "type": "string"
+        },
+        "breakdown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Breakdown"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Assessment"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "chosenOfferId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Chosenofferid"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "dataIssues": {
+          "items": {
+            "$ref": "#/$defs/Issue"
+          },
+          "title": "Dataissues",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "estimatedNetSaving": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expiresAt": {
+          "format": "date-time",
+          "title": "Expiresat",
+          "type": "string"
+        },
+        "fallbackReason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallbackreason"
+        },
+        "fingerprint": {
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "pnr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pnr"
+        },
+        "policyVersion": {
+          "title": "Policyversion",
+          "type": "string"
+        },
+        "promptVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Promptversion"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "reasoner": {
+          "title": "Reasoner",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/Reason"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "index",
+        "pnr",
+        "action",
+        "chosenOfferId",
+        "estimatedNetSaving",
+        "breakdown",
+        "confidence",
+        "reasons",
+        "alternatives",
+        "candidates",
+        "dataIssues",
+        "reasoner",
+        "policyVersion",
+        "asOf",
+        "expiresAt",
+        "fingerprint"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "RuleResult": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule",
+        "passed",
+        "detail"
+      ],
+      "title": "RuleResult",
+      "type": "object"
+    },
+    "Settlement": {
+      "enum": [
+        "CASH",
+        "CREDIT"
+      ],
+      "title": "Settlement",
+      "type": "string"
+    },
+    "SettlementPolicy": {
+      "enum": [
+        "cash_only",
+        "credit_face_value",
+        "credit_discounted"
+      ],
+      "title": "SettlementPolicy",
+      "type": "string"
+    },
+    "Tier": {
+      "enum": [
+        "INELIGIBLE",
+        "REVIEW_LEVEL",
+        "CLEAN"
+      ],
+      "title": "Tier",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "asOf": {
+      "format": "date-time",
+      "title": "Asof",
+      "type": "string"
+    },
+    "capturedAt": {
+      "format": "date-time",
+      "title": "Capturedat",
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicyConfig"
+    },
+    "reasoner": {
+      "title": "Reasoner",
+      "type": "string"
+    },
+    "recommendations": {
+      "items": {
+        "$ref": "#/$defs/Recommendation"
+      },
+      "title": "Recommendations",
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": "1",
+      "default": "1",
+      "title": "Schemaversion",
+      "type": "string"
+    }
+  },
+  "required": [
+    "asOf",
+    "capturedAt",
+    "reasoner",
+    "policy",
+    "recommendations"
+  ],
+  "title": "RecommendationsFile",
+  "type": "object"
+}

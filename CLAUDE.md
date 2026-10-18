@@ -62,16 +62,17 @@ expect to run them yourself. Guide: `docs/AI_SETUP.md`.
 ## Project decisions (quick reference; rationale lives in docs/decisions.md)
 <!-- kickoff:start -->
 - **Stack:** Python 3.14 ([ADR-0001](docs/adr/0001-python-3-14.md)) · uv + `pyproject.toml` + committed `uv.lock` (D-06) · src layout, package `rebooking_copilot`
-- **Commands:** install `uv sync` · test `uv run pytest` · run `uv run rebooking-copilot [--pnrs PATH] [--fares PATH]` ·
-  offline check `env -u ANTHROPIC_API_KEY uv run rebooking-copilot`
+- **Commands:** install `uv sync` · test `uv run pytest` · run `uv run rebooking-copilot [--pnrs PATH] [--fares PATH] [--out PATH]` ·
+  offline check `env -u ANTHROPIC_API_KEY uv run rebooking-copilot` · Claude mode `uv sync --extra llm` then
+  `uv run --extra llm rebooking-copilot --reasoner claude` (costs money; ask first) · regenerate the schema `uv run python -m rebooking_copilot.output`
 - **Architecture:** an LLM agent over deterministic tools; code builds the eligible set and re-validates (D-19, ADR-0007).
   The agent runs only for review-level or multi-offer cases (D-21).
-- **LLM mode:** deterministic stub by default; optional Claude when `ANTHROPIC_API_KEY` is set *and* an explicit switch (defined in
-  `/slice reasoner`) is on (D-02, ADR-0002). The LLM decides only inside the code-built eligible set (D-07, ADR-0004).
-- **Dependencies:** pydantic at runtime · LangChain (`langchain`, `langchain-anthropic`) in the optional extra `llm`, lazily
-  imported (D-20, ADR-0008; added in `/slice reasoner`) · dev: pytest, hypothesis (D-04, ADR-0003)
+- **LLM mode:** deterministic stub by default; Claude mode with `--reasoner claude` or `REBOOKING_REASONER=claude` (the flag wins, D-37):
+  `claude-sonnet-5-5`, effort `medium`, refusal fallback on (D-36, ADR-0009). The LLM decides only inside the code-built eligible set (D-07).
+- **Dependencies:** pydantic at runtime · `langchain-anthropic` (+ `anthropic`) in the optional extra `llm`, lazily imported
+  (D-20, D-38) · dev: pytest, hypothesis, langchain-anthropic for the scripted-agent tests (D-04, ADR-0003)
 - **Method:** test-first: a golden case per fixture PNR plus invariant/property tests (D-03)
-- **Output:** `recommendations.json` validated by a JSON Schema generated from the pydantic models, plus a stdout table (D-05)
+- **Output:** `out/recommendations.json` (camelCase, validated against `schemas/recommendations.schema.json` before writing), plus a stdout table and rationales (D-05)
 - **Process:** commit at phase/slice boundaries after OK; review depth chosen at review time (D-08)
 - **Session model:** Claude Opus 5.5 (`claude-opus-5-5`) in the Claude Code desktop app
 <!-- kickoff:end -->
