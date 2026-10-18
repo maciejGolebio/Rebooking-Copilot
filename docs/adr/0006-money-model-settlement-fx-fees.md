@@ -42,3 +42,7 @@ fee and +110 with the offer's.
 
 ## Revisit when
 The assessors answer the settlement, fee-basis and point-of-sale questions, or a real FX source is wired in.
+
+## Clarification (2026-10-18, D-30)
+"Isn't counted" under `cash_only` means the credit saving is *reported* (estimated saving, settlement CREDIT, reason
+SAVING_AS_CREDIT) but can never become REBOOK. The action is NEEDS_REVIEW. No decision changed.

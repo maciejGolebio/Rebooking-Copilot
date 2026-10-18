@@ -21,7 +21,8 @@ def test_cli_runs_on_fixtures(capsys):
     out = capsys.readouterr().out
     assert code == 0
     assert "Loaded 5 bookings (0 rejected) and 6 offers (0 rejected)" in out
-    assert "not implemented yet" in out
+    rows = {line.split()[0]: line.split()[1] for line in out.splitlines() if line[:6] in {"QX7T2A", "LM9P4C", "RT5K8B", "ZC3N1D", "HB6W9E"}}
+    assert rows == {"QX7T2A": "NEEDS_REVIEW", "LM9P4C": "DO_NOT_REBOOK", "RT5K8B": "REBOOK", "ZC3N1D": "NEEDS_REVIEW", "HB6W9E": "DO_NOT_REBOOK"}
 
 
 def test_cli_reports_unusable_input(tmp_path, capsys):

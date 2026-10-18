@@ -47,6 +47,10 @@ class RejectedOffer(Result):
     index: int
     offer_id: str | None
     issues: tuple[Issue, ...]
+    # Best-effort route from the raw record, so bookings on that route know an offer was lost (D-35). None if unreadable.
+    origin: str | None = None
+    destination: str | None = None
+    departure_date: str | None = None
 
 
 class FareSnapshot(Result):
@@ -81,12 +85,15 @@ def load_fare_snapshot(path: Path) -> FareSnapshot:
 
 def parse_pnrs(data: dict) -> PnrLoad:
     records = _record_list(data, "pnrs")
+    duplicates = _duplicates(_str_field(r, "pnr") for r in records)
     accepted: list[Pnr] = []
     rejected: list[RejectedPnr] = []
     for index, record in enumerate(records):
         pnr, issues = _validate(Pnr, record)
         if pnr is not None:
-            issues = pnr_issues(pnr)
+            issues = _guarded(pnr_issues, pnr)
+        if _str_field(record, "pnr") in duplicates:
+            issues = [*issues, Issue(code=IssueCode.DATA_INCONSISTENT, detail="PNR locator appears more than once in the input")]
         if issues:
             rejected.append(RejectedPnr(index=index, pnr=pnr.pnr if pnr else _str_field(record, "pnr"), issues=tuple(issues)))
         else:
@@ -95,15 +102,27 @@ def parse_pnrs(data: dict) -> PnrLoad:
 
 
 def parse_fare_snapshot(data: dict) -> FareSnapshot:
+    records = _record_list(data, "offers")
+    duplicates = _duplicates(_str_field(r, "offerId") for r in records)
     accepted: list[Offer] = []
     rejected: list[RejectedOffer] = []
-    for index, record in enumerate(_record_list(data, "offers")):
+    for index, record in enumerate(records):
         offer, issues = _validate(Offer, record)
         if offer is not None:
-            issues = offer_issues(offer)
+            issues = _guarded(offer_issues, offer)
+        if _str_field(record, "offerId") in duplicates:
+            issues = [*issues, Issue(code=IssueCode.DATA_INCONSISTENT, detail="offerId appears more than once in the snapshot")]
         if issues:
+            route = record.get("route") if isinstance(record, dict) else None
             rejected.append(
-                RejectedOffer(index=index, offer_id=offer.offer_id if offer else _str_field(record, "offerId"), issues=tuple(issues))
+                RejectedOffer(
+                    index=index,
+                    offer_id=offer.offer_id if offer else _str_field(record, "offerId"),
+                    issues=tuple(issues),
+                    origin=_str_field(route, "origin"),
+                    destination=_str_field(route, "destination"),
+                    departure_date=_str_field(route, "departureDate"),
+                )
             )
         else:
             accepted.append(offer)
@@ -140,13 +159,32 @@ def pnr_issues(pnr: Pnr) -> list[Issue]:
 def offer_issues(offer: Offer) -> list[Issue]:
     """Data-quality rules across fields of a structurally valid offer."""
     issues: list[Issue] = []
-    if offer.price.amount < 0 or offer.change_fee_per_passenger.amount < 0:
-        issues.append(Issue(code=IssueCode.DATA_INVALID, detail="offer amounts must not be negative"))
+    if offer.price.amount <= 0:
+        issues.append(Issue(code=IssueCode.DATA_INVALID, detail="offer price must be positive"))
+    if offer.change_fee_per_passenger.amount < 0:
+        issues.append(Issue(code=IssueCode.DATA_INVALID, detail="offer change fee must not be negative"))
     if offer.price.currency != offer.change_fee_per_passenger.currency:
         issues.append(Issue(code=IssueCode.DATA_INCONSISTENT, detail="price and change fee are in different currencies"))
     if offer.route.departure_date != offer.departure.date():
         issues.append(Issue(code=IssueCode.DATA_INCONSISTENT, detail=f"route date {offer.route.departure_date} ≠ departure {offer.departure.date()}"))
     return issues
+
+
+def _duplicates(values) -> set[str]:
+    seen: set[str] = set()
+    repeated: set[str] = set()
+    for value in values:
+        if value is not None:
+            (repeated if value in seen else seen).add(value)
+    return repeated
+
+
+def _guarded(check, record) -> list[Issue]:
+    """Data-quality checks do arithmetic on input values; if that arithmetic fails, the record is invalid data."""
+    try:
+        return check(record)
+    except ArithmeticError as exc:
+        return [Issue(code=IssueCode.DATA_INVALID, detail=f"amounts can't be evaluated: {type(exc).__name__}")]
 
 
 def _record_list(data: dict, key: str) -> list:

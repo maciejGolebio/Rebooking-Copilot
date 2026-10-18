@@ -36,7 +36,8 @@ deterministic checks: a code-built eligible set, code-computed numbers, re-valid
    sourced FX rate) ∧ seats ≥ pax ∧ net saving ≥ threshold ∧ the input data is consistent.
 3. Any failing hard constraint ⇒ never REBOOK.
 4. Monotonicity: raising the offer price or a fee never moves a decision *toward* REBOOK (neither DO_NOT_REBOOK nor
-   NEEDS_REVIEW may become REBOOK), and never increases the saving.
+   NEEDS_REVIEW may become REBOOK), and never increases the saving. It holds per booking. Two documented exceptions:
+   a price rising out of a "too good to be true" band (D-34), and the cross-booking seat ranking (D-31/D-35).
 5. Determinism (stub mode, D-23): same input + policy version ⇒ identical output. Inject the clock and sort outputs and
    candidates stably. Claude mode is not asserted deterministic; it records the model, prompt version and tool trace.
 6. Reasoner bounds (D-07): for *any* reasoner output, adversarial ones included, REBOOK happens only for an offer

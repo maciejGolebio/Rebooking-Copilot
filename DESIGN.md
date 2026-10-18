@@ -88,8 +88,14 @@ flowchart TD
 | Another flight departing more than ±60 min away, or arriving on a later day | ineligible | D-14 |
 | Net < max(25, 5% of total paid) | ineligible | D-13 |
 | Seats < passengers, or lost in the seat ledger | ineligible (`SEAT_CONTENTION`) | D-24 |
-| Cabin/product downgrade · lost refundability · carrier change · added stop · another flight within ±60 min | review-level: agent REBOOK capped at MEDIUM; stub → NEEDS_REVIEW | D-11, D-14, D-16, D-18 |
+| Departs less than 24 h after as_of (local time read as UTC+14) | ineligible (`DEPARTS_TOO_SOON`) | D-33 |
+| Cabin/product downgrade · lost refundability · carrier change · added stop · another flight within ±60 min · more than 60% cheaper than paid | review-level: agent REBOOK capped at MEDIUM; stub → NEEDS_REVIEW | D-11, D-14, D-16, D-18, D-34 |
 | None of the above | clean: REBOOK possible, HIGH reachable | ADR-0005 |
+- **Seat ledger** (D-24, D-31): deferred acceptance across the run. Bookings propose to their eligible offers in
+  preference order; each offer keeps the proposers that fit its seats, by REBOOK-bound first, then saving in the
+  offer's currency, then input index. Seats are never oversold, and amounts in different currencies are never compared.
+- **Robustness** (D-35, from the money-safety review): duplicate ids rejected, FX quotes validated, bad data on the route
+  → OFFER_DATA_REJECTED, per-booking isolation (EVALUATION_ERROR), a fixed Decimal context, bounded amounts. Each has a regression test.
 - **Against hallucinated savings:** every output number is copied from the code breakdown; the agent's tools never take amounts;
   the validator rebuilds E independently; there's a faithfulness check; the veto rule makes missed savings visible (D-22).
 - **Invariants to test:**
@@ -136,10 +142,11 @@ flowchart TD
 | Area | Plan | Note |
 |---|---|---|
 | Typed models, Money, validating loader | **Built** (`/slice core`) | Money properties (hypothesis), per-record rejection, CLI loads fixtures |
-| Eligible set, policy tiers, money breakdown, FX stub, seat ledger, fingerprint, expiry | Planned | `/slice decision` |
+| Matching, policy tiers + rule trace, money breakdown, FX provider (mock), seat ledger, confidence, fingerprint, expiry | **Built** (`/slice decision`) | 186 spec-derived tests: golden per fixture booking, invariants (hypothesis), seat contention, FX, settlement variants |
 | LangChain agent, tools, validator, prompt, fallback | Built (Claude mode optional) | `/slice reasoner` |
 | Tests: golden, invariants, adversarial fake agent, multi-offer cases | Built | `test-engineer` |
 | Priority score, scheduler, queues, batch calls, caching, shadow mode | Described | §5 |
+| FX rate plausibility against a reference rate | **Not done** (known limitation) | A plausible-looking misquote still passes; production cross-checks two sources (D-35) |
 | The approve → execute flow (LangGraph), idempotency, kill switch | Described | §6 |
 To be updated after each slice.
 

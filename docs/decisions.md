@@ -43,6 +43,15 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-24 | Prototype grafts from C | Build the fingerprint, a per-run seat ledger (greedy by net saving; losers `SEAT_CONTENTION`) and `asOf`/`expiresAt` (asOf + one reshop interval); the priority score is described only | user (ledger and expiry rules: default) | accepted |
 | D-25 | Agent guardrail defaults | Tools take ids only and are read-only; submit tool has no numeric fields; budget 6 turns / 30 s → fallback; tool results are untrusted data; model id, effort and structured-output mechanism are chosen in `/slice reasoner` | default | accepted |
 | D-26 | Input data contract | Reject each bad record on its own with `DATA_INVALID` / `DATA_INCONSISTENT` / `UNSUPPORTED_ITINERARY`; no coercion, no unknown fields, floats rejected for money, unknown ISO currencies rejected; multi-segment → unsupported | default | accepted |
+| D-27 | FX provider | API-shaped `FxProvider.quote(from, to, as_of)`; `MockFxProvider` (`mock-fx-v1`) returns an executable rate with the spread included: USD→EUR 0.9276 (≈1.10 mid less ~2%); missing pair → NEEDS_REVIEW `CURRENCY_MISMATCH_NO_FX`; refines D-12 | user (shape) / default (mock values) | accepted |
+| D-28 | Confidence rules | REBOOK starts HIGH, lowered one band each for FX use, net < 2× threshold, snapshot older than the reshop interval; review-level capped at MEDIUM; NEEDS_REVIEW = LOW; DO_NOT_REBOOK HIGH unless a candidate had a positive net blocked only by money rules or seat contention (then MEDIUM); refines D-17 | default | accepted |
+| D-29 | Clean first | Stub mode picks the best *clean* offer before any review-level one; D-15 applies within each tier; other eligible offers are listed as alternatives | user | accepted |
+| D-30 | Clarifications | Under `cash_only` a credit saving is *reported* (estimated saving + settlement CREDIT) but can never become REBOOK; "net saving" in D-15/D-24 means the *counted* net saving | default | accepted |
+| D-31 | Seat-ledger rules | REBOOK-bound bookings are served before NEEDS_REVIEW-bound ones; within a group, by the counted saving of the offer the booking would pick (D-29), then input index; mixed currencies are ranked in the offer's currency via the inverse of each booking's own FX quote (ranking only) | user | accepted |
+| D-32 | Fingerprint scope | Per booking: the booking, its candidate offers, policy, FX quotes, as_of, reasoner. Seat contention with other bookings can change the final recommendation under the same fingerprint (documented) | user | accepted |
+| D-33 | Lead time | An offer is ineligible (DEPARTS_TOO_SOON) unless its earliest possible departure (local time read as UTC+14) is ≥ as_of + 24 h | user | accepted |
+| D-34 | Price anomaly | An offer more than 60% cheaper than the paid fare per passenger (in the ticket currency) is review-level (PRICE_ANOMALY) | user | accepted |
+| D-35 | Review hardening | Duplicate ids rejected; offer price > 0; FX quotes validated; per-booking isolation; rejected offers on the route → OFFER_DATA_REJECTED; freed seats re-offered; bounded amounts in a fixed Decimal context; fingerprint adds captured_at + engine | default | accepted |
 
 ## Entries
 
@@ -246,10 +255,96 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 - **Decided by:** default (follows from D-00b and D-00c; stated at `/slice core`) · **Status:** accepted
 - **Consequences / where it shows:** `loader.py`, `models.py`, `money.py`; `tests/test_loader.py`, `tests/test_money.py`.
 
+### D-27: FX provider (2026-10-18), refines D-12
+- **Context:** the user asked for currency conversion to be "a method (it should be API, but just mock it for now)".
+- **Decision:**
+  - `FxProvider.quote(from_currency, to_currency, as_of) → FxQuote(rate, source, as_of)` is the seam for a real FX or treasury API.
+  - `MockFxProvider` (`source = "mock-fx-v1"`) returns an *executable* rate with the spread already included, as a real
+    API quote would, so the spread is not a policy setting.
+  - The mock table is USD→EUR 0.9276, illustrative: about 1.10 USD/EUR mid less roughly 2%. Same currency → rate 1.
+  - A missing pair raises `FxUnavailableError`, which leads to NEEDS_REVIEW `CURRENCY_MISMATCH_NO_FX`.
+  - Offers are converted into the ticket's currency.
+- **Decided by:** user (an API-shaped method, mocked) and default (the mock values; spread inside the quote) · **Status:** accepted
+- **Consequences:** RT5K8B: 2,100 USD × 0.9276 = 1,947.96 EUR, net 252.04 EUR ≥ 110 → REBOOK, lowered to MEDIUM for FX use.
+
+### D-28: Confidence rules (2026-10-18), refines D-17
+- **REBOOK:** starts at HIGH and drops one band for each of: FX used; counted net < 2× the threshold; snapshot older than the reshop interval.
+- **Review-level offers** are capped at MEDIUM (Claude mode).
+- **NEEDS_REVIEW** is LOW.
+- **DO_NOT_REBOOK** is HIGH when every candidate has a net ≤ 0 or fails a non-money hard block (bags, schedule, later-day arrival,
+  seats). It is MEDIUM when some candidate had a positive net and failed only on the threshold or seat contention.
+- **Decided by:** default · **Status:** accepted · the multiple (2) is configurable in `PolicyConfig`.
+
+### D-29: Clean first (2026-10-18), refines D-15
+- **Context:** in stub mode a review-level winner becomes NEEDS_REVIEW even when a clean REBOOK exists.
+- **Decision:** pick the best clean offer first, and use review-level offers only if no clean one exists. D-15 (net
+  saving → smallest schedule shift → most seats; then offer id for determinism) applies within each tier. Other eligible offers are listed as alternatives.
+- **Decided by:** user · **Status:** accepted
+
+### D-30: Clarifications from the test-first pass (2026-10-18)
+- **Under `cash_only`:** a saving that would come back as credit is *reported* (estimated net saving, breakdown
+  settlement CREDIT, reason SAVING_AS_CREDIT) and the action is NEEDS_REVIEW. It can never become REBOOK. This is what
+  ADR-0006's "isn't counted" means.
+- **"Net saving"** in D-15 and D-24 means the *counted* net saving. The two differ only under `credit_discounted`.
+- **Decided by:** default (resolving wording found by the test-engineer) · **Status:** accepted
+
+### D-31: Seat-ledger rules (2026-10-18), refines D-24
+- **Context:** the test-engineer found three gaps in "greedy by net saving".
+- **Decision:**
+  - Bookings whose preferred offer would end in REBOOK are served before those that would end in NEEDS_REVIEW.
+  - Within each group, bookings are ranked by the counted net saving of the offer they would actually pick (clean
+    first, D-29), then by input index.
+  - Mixed ticket currencies are ranked in the offer's currency, using the inverse of the FX quote in each booking's own
+    breakdown. This is for ranking only; amounts stay in each ticket's currency.
+  - A booking that loses an offer to contention gets SEAT_CONTENTION on it and falls through to its next eligible offer.
+- **Decided by:** user (REBOOK first, preferred-offer ranking, FX ranking) and default (the inverse-quote mechanics) · **Status:** accepted
+
+### D-32: Fingerprint scope (2026-10-18), refines D-24
+- **Options:** include the ledger context · per booking only
+- **Decision:** the fingerprint covers the booking's own inputs only: the booking, its candidate offers, the policy,
+  the FX quotes, as_of and the reasoner. Seat contention with other bookings in the same run can change the final
+  recommendation under the same fingerprint, and this is documented. The whole run stays deterministic in stub mode (D-23).
+- **Decided by:** user · **Status:** accepted
+
+### D-33: Lead time (2026-10-18)
+- **Context:** the money-safety review found that a run with today's date REBOOKs onto flights that have already left.
+- **Options:** 24 h · 3 h · not departed only
+- **Decision:** 24 h. Times carry no timezone, so the check assumes the earliest possible zone: earliest departure = local
+  time read as UTC − 14 h, and it must be ≥ as_of + 24 h. Otherwise the offer is INELIGIBLE with DEPARTS_TOO_SOON, a
+  non-money block, so DO_NOT_REBOOK stays HIGH. With airport timezones (production) the check becomes exact.
+- **Decided by:** user · **Status:** accepted · configurable (`min_lead_time`, `max_utc_offset`)
+
+### D-34: Price anomaly (2026-10-18)
+- **Context:** a zero price is now invalid data. A wildly cheap offer could still be a feed error.
+- **Options:** more than 60% off → review · more than 80% off → review · no guard
+- **Decision:** an offer whose price in the ticket currency is below paid × (1 − 0.60) is review-level (PRICE_ANOMALY).
+  It is never approved by the stub, and is capped at MEDIUM in Claude mode. The fixtures' biggest discount is 42% (HB6W9E/OF-5002).
+- **Consequence:** money-safety invariant 4 has one deliberate exception. A price rising *out of* the anomaly band can
+  make an offer eligible. The property test asserts the invariant only for offers outside the band.
+- **Decided by:** user · **Status:** accepted · configurable (`max_plausible_discount`)
+
+### D-35: Hardening from the money-safety review (2026-10-18)
+- **Context:** `money-safety-reviewer` reported 10 findings, all reproduced. All were accepted; regression tests are in `tests/test_review_regressions.py`.
+- **Decision (defaults):**
+  1. A repeated offerId or PNR locator rejects every copy as DATA_INCONSISTENT. This prevents overselling and double rebooking.
+  2. FX quotes are checked before use: the pair must match the request, the rate must be > 0, and the quote must be within
+     one reshop interval of as_of. Any provider error means no usable quote (CURRENCY_MISMATCH_NO_FX; the trace records why).
+  3. Each booking is evaluated in isolation. An unexpected error gives that booking NEEDS_REVIEW with EVALUATION_ERROR, and the run continues.
+  4. as_of must be timezone-aware and not earlier than captured_at.
+  5. The seat ledger re-offers seats freed by a displacement.
+  6. An offer price ≤ 0 is DATA_INVALID.
+  7. An offer on the booking's route that the loader rejected → OFFER_DATA_REJECTED: a REBOOK drops one band, and anything else becomes NEEDS_REVIEW.
+  8. Amounts must satisfy |amount| ≤ 10¹², passengers ≤ 99, counts ≤ 9,999. All money arithmetic runs in a fixed local Decimal context.
+  9. The fingerprint adds captured_at, rejected offers on the route, and the engine version.
+  10. Invariant 4 holds per booking. Across bookings, the D-31 ranking can reorder the ledger (documented and tested).
+- **Known limitation (not fixed):** there is no plausibility check of an FX rate against a reference. A plausible-looking
+  misquote (e.g. 0.5 instead of 0.9276) would still produce a REBOOK. In production, cross-check two sources.
+- **Decided by:** default · **Status:** accepted
+
 <!--
 Entry format:
 
-### D-27: <topic> (YYYY-MM-DD)
+### D-36: <topic> (YYYY-MM-DD)
 - **Context:** 1–2 lines; cite PNRs or fixture facts where relevant.
 - **Options:** A) …  B) …  C) …
 - **Decision:** …

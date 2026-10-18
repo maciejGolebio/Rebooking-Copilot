@@ -18,7 +18,7 @@ Airport = Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
 Carrier = Annotated[str, Field(pattern=r"^[A-Z0-9]{2}$")]
 FlightNumber = Annotated[str, Field(pattern=r"^[A-Z0-9]{2}[0-9]{1,4}[A-Z]?$")]
 FareBasis = Annotated[str, Field(pattern=r"^[A-Za-z0-9]{1,15}$")]
-Count = Annotated[StrictInt, Field(ge=0)]
+Count = Annotated[StrictInt, Field(ge=0, le=9_999)]
 
 
 class Cabin(StrEnum):
@@ -58,7 +58,7 @@ class Ticket(Record):
 
 class Pnr(Record):
     pnr: Annotated[str, Field(pattern=r"^[A-Z0-9]{6}$")]
-    passengers: Annotated[StrictInt, Field(ge=1)]
+    passengers: Annotated[StrictInt, Field(ge=1, le=99)]
     itinerary: Annotated[tuple[Segment, ...], Field(min_length=1)]
     ticket: Ticket
 
