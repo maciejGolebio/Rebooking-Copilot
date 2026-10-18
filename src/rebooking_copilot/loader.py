@@ -6,13 +6,11 @@ is unusable as a whole (unreadable JSON, missing top-level keys, no timezone-awa
 """
 
 import json
-from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import AwareDatetime, BaseModel, TypeAdapter, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 
 from rebooking_copilot.models import Offer, Pnr
 
@@ -23,44 +21,42 @@ class IssueCode(StrEnum):
     UNSUPPORTED_ITINERARY = "UNSUPPORTED_ITINERARY"  # valid, but outside what v1 can evaluate safely
 
 
-@dataclass(frozen=True)
-class Issue:
+class Result(BaseModel):
+    """Immutable result types; pydantic so they serialise into the output and its JSON Schema (D-05)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class Issue(Result):
     code: IssueCode
     detail: str
 
 
-@dataclass(frozen=True)
-class RejectedPnr:
+class RejectedPnr(Result):
     index: int
     pnr: str | None
-    issues: list[Issue]
+    issues: tuple[Issue, ...]
 
 
-@dataclass(frozen=True)
-class PnrLoad:
-    pnrs: list[Pnr]
-    rejected: list[RejectedPnr]
+class PnrLoad(Result):
+    pnrs: tuple[Pnr, ...]
+    rejected: tuple[RejectedPnr, ...]
 
 
-@dataclass(frozen=True)
-class RejectedOffer:
+class RejectedOffer(Result):
     index: int
     offer_id: str | None
-    issues: list[Issue]
+    issues: tuple[Issue, ...]
 
 
-@dataclass(frozen=True)
-class FareSnapshot:
-    captured_at: datetime
-    offers: list[Offer]
-    rejected: list[RejectedOffer]
+class FareSnapshot(Result):
+    captured_at: AwareDatetime
+    offers: tuple[Offer, ...]
+    rejected: tuple[RejectedOffer, ...]
 
 
 class LoaderError(Exception):
     """The input as a whole is unusable."""
-
-
-_CAPTURED_AT = TypeAdapter(AwareDatetime)
 
 
 def read_json(path: Path) -> dict:
@@ -92,17 +88,13 @@ def parse_pnrs(data: dict) -> PnrLoad:
         if pnr is not None:
             issues = pnr_issues(pnr)
         if issues:
-            rejected.append(RejectedPnr(index, pnr.pnr if pnr else _str_field(record, "pnr"), issues))
+            rejected.append(RejectedPnr(index=index, pnr=pnr.pnr if pnr else _str_field(record, "pnr"), issues=tuple(issues)))
         else:
             accepted.append(pnr)
-    return PnrLoad(accepted, rejected)
+    return PnrLoad(pnrs=tuple(accepted), rejected=tuple(rejected))
 
 
 def parse_fare_snapshot(data: dict) -> FareSnapshot:
-    try:
-        captured_at = _CAPTURED_AT.validate_python(data.get("capturedAt"))
-    except ValidationError as exc:
-        raise LoaderError(f"capturedAt must be a timezone-aware timestamp: {exc.errors()[0]['msg']}") from exc
     accepted: list[Offer] = []
     rejected: list[RejectedOffer] = []
     for index, record in enumerate(_record_list(data, "offers")):
@@ -110,10 +102,15 @@ def parse_fare_snapshot(data: dict) -> FareSnapshot:
         if offer is not None:
             issues = offer_issues(offer)
         if issues:
-            rejected.append(RejectedOffer(index, offer.offer_id if offer else _str_field(record, "offerId"), issues))
+            rejected.append(
+                RejectedOffer(index=index, offer_id=offer.offer_id if offer else _str_field(record, "offerId"), issues=tuple(issues))
+            )
         else:
             accepted.append(offer)
-    return FareSnapshot(captured_at, accepted, rejected)
+    try:
+        return FareSnapshot(captured_at=data.get("capturedAt"), offers=tuple(accepted), rejected=tuple(rejected))
+    except ValidationError as exc:
+        raise LoaderError(f"capturedAt must be a timezone-aware timestamp: {exc.errors()[0]['msg']}") from exc
 
 
 def pnr_issues(pnr: Pnr) -> list[Issue]:
@@ -121,22 +118,22 @@ def pnr_issues(pnr: Pnr) -> list[Issue]:
     issues: list[Issue] = []
     ticket = pnr.ticket
     if len(pnr.itinerary) != 1:
-        issues.append(Issue(IssueCode.UNSUPPORTED_ITINERARY, f"v1 evaluates single-segment tickets only; got {len(pnr.itinerary)} segments"))
+        issues.append(Issue(code=IssueCode.UNSUPPORTED_ITINERARY, detail=f"v1 evaluates single-segment tickets only; got {len(pnr.itinerary)} segments"))
     amounts = (ticket.price_per_passenger, ticket.total_paid, ticket.change_fee_per_passenger)
     if any(m.amount < 0 for m in amounts):
-        issues.append(Issue(IssueCode.DATA_INVALID, "ticket amounts must not be negative"))
+        issues.append(Issue(code=IssueCode.DATA_INVALID, detail="ticket amounts must not be negative"))
     currencies = sorted({m.currency for m in amounts})
     if len(currencies) > 1:
-        issues.append(Issue(IssueCode.DATA_INCONSISTENT, f"ticket amounts in several currencies: {', '.join(currencies)}"))
+        issues.append(Issue(code=IssueCode.DATA_INCONSISTENT, detail=f"ticket amounts in several currencies: {', '.join(currencies)}"))
     elif ticket.price_per_passenger * pnr.passengers != ticket.total_paid:
         issues.append(
             Issue(
-                IssueCode.DATA_INCONSISTENT,
-                f"totalPaid {ticket.total_paid} ≠ pricePerPassenger {ticket.price_per_passenger} × {pnr.passengers} passengers",
+                code=IssueCode.DATA_INCONSISTENT,
+                detail=f"totalPaid {ticket.total_paid} ≠ pricePerPassenger {ticket.price_per_passenger} × {pnr.passengers} passengers",
             )
         )
     if any(segment.cabin != ticket.cabin for segment in pnr.itinerary):
-        issues.append(Issue(IssueCode.DATA_INCONSISTENT, "segment cabin differs from ticket cabin"))
+        issues.append(Issue(code=IssueCode.DATA_INCONSISTENT, detail="segment cabin differs from ticket cabin"))
     return issues
 
 
@@ -144,11 +141,11 @@ def offer_issues(offer: Offer) -> list[Issue]:
     """Data-quality rules across fields of a structurally valid offer."""
     issues: list[Issue] = []
     if offer.price.amount < 0 or offer.change_fee_per_passenger.amount < 0:
-        issues.append(Issue(IssueCode.DATA_INVALID, "offer amounts must not be negative"))
+        issues.append(Issue(code=IssueCode.DATA_INVALID, detail="offer amounts must not be negative"))
     if offer.price.currency != offer.change_fee_per_passenger.currency:
-        issues.append(Issue(IssueCode.DATA_INCONSISTENT, "price and change fee are in different currencies"))
+        issues.append(Issue(code=IssueCode.DATA_INCONSISTENT, detail="price and change fee are in different currencies"))
     if offer.route.departure_date != offer.departure.date():
-        issues.append(Issue(IssueCode.DATA_INCONSISTENT, f"route date {offer.route.departure_date} ≠ departure {offer.departure.date()}"))
+        issues.append(Issue(code=IssueCode.DATA_INCONSISTENT, detail=f"route date {offer.route.departure_date} ≠ departure {offer.departure.date()}"))
     return issues
 
 
@@ -164,7 +161,7 @@ def _validate[M: BaseModel](model: type[M], record: object) -> tuple[M | None, l
         return model.model_validate(record), []
     except ValidationError as exc:
         detail = "; ".join(f"{'.'.join(str(p) for p in err['loc']) or '<record>'}: {err['msg']}" for err in exc.errors())
-        return None, [Issue(IssueCode.DATA_INVALID, detail)]
+        return None, [Issue(code=IssueCode.DATA_INVALID, detail=detail)]
 
 
 def _str_field(record: object, key: str) -> str | None:

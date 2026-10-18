@@ -25,3 +25,4 @@ setup below; they count as "rejected or corrected" examples too.
 | 18:16 | design | Architecture A (safety-first pipeline, one LLM call) + grafts | rejected ★ | User chose B, an LLM agent over deterministic tools (D-19, ADR-0007). Why: _add_ |
 | 18:16 | design | Direct Anthropic SDK behind the Reasoner interface | rejected | User chose LangChain (D-20, ADR-0008). Why: _add_ |
 | 18:16 | design | A replay cache to make Claude mode reproducible | rejected | User: claim determinism for stub mode only (D-23) |
+| 18:29 | slice:core | Plain dataclasses for the loader's result types, next to pydantic input models | corrected ★ | User asked "what is the point to use dataclasses while we [use] pydantic?". The results reach the output and its JSON Schema (D-05), and the frozen dataclasses held mutable lists; switched to frozen pydantic models with tuples |

@@ -21,7 +21,7 @@ def raw(name: str) -> dict:
 def test_fixture_pnrs_load_typed_and_exact():
     result = load_pnrs(FIXTURES / "pnrs.json")
     assert [p.pnr for p in result.pnrs] == ["QX7T2A", "LM9P4C", "RT5K8B", "ZC3N1D", "HB6W9E"]
-    assert result.rejected == []
+    assert result.rejected == ()
     lm9 = result.pnrs[1]
     assert lm9.passengers == 2
     assert lm9.ticket.price_per_passenger == Money(amount=Decimal("350.00"), currency="USD")
@@ -35,7 +35,7 @@ def test_fixture_snapshot_loads_with_aware_capture_time():
     snap = load_fare_snapshot(FIXTURES / "fares_feed.json")
     assert snap.captured_at.tzinfo is not None
     assert len(snap.offers) == 6
-    assert snap.rejected == []
+    assert snap.rejected == ()
     of3 = next(o for o in snap.offers if o.offer_id == "OF-3001")
     assert of3.price == Money(amount=Decimal("2100.00"), currency="USD")
     assert of3.route.departure_date == date(2026, 8, 20)
@@ -147,3 +147,15 @@ def test_broken_top_level_structure_raises(tmp_path):
     bad.write_text('{"bookings": []}')
     with pytest.raises(LoaderError):
         load_pnrs(bad)
+
+
+def test_rejections_serialise_for_the_output():
+    def mutate(pnrs):
+        pnrs[1]["ticket"]["totalPaid"]["amount"] = Decimal("650.00")
+
+    result = parse_pnrs(_pnrs_with(mutate))
+    dumped = json.loads(result.model_dump_json())
+    (rej,) = dumped["rejected"]
+    assert rej["pnr"] == "LM9P4C"
+    assert rej["issues"][0]["code"] == "DATA_INCONSISTENT"
+    assert dumped["pnrs"][0]["ticket"]["price_per_passenger"]["amount"] == "480.00"
