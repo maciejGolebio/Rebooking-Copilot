@@ -1,7 +1,7 @@
 # AI setup: how to drive this take-home with Claude Code
 
 This repo ships a small Claude Code setup in `.claude/`, tuned to one goal: deliver the
-Rebooking Copilot brief (`docs/ASSIGNMENT.md`) and score well on its rubric.
+Rebooking Copilot brief (`docs/ASSIGNMENT.md`) against the criteria it states.
 Claude does the legwork; **you make every product, methodology and technology decision**. The
 setup asks you at fixed points and records the answers in `docs/decisions.md`.
 

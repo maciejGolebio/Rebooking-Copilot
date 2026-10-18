@@ -19,7 +19,7 @@ from factories import booking, fixture_inputs, load, offer, usd
 from rebooking_copilot.agent import DEFAULT_EFFORT, DEFAULT_MODEL, ClaudeReasoner
 from rebooking_copilot.decision import Action, Confidence, evaluate
 from rebooking_copilot.policy import PolicyConfig, Reason, SettlementPolicy
-from rebooking_copilot.reasoning import PROMPT_VERSION, UnavailableReasoner, is_faithful, numbers_in
+from rebooking_copilot.reasoning import PROMPT_VERSION, AgentRun, UnavailableReasoner, allowed_for_case, allowed_for_recommendation, check_rationale, numbers_in
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -79,7 +79,7 @@ def test_every_stub_recommendation_has_a_faithful_rationale():
     for rec in evaluate(*fixture_inputs()):
         assert rec.rationale, rec.pnr
         assert rec.reasoner == "stub" and rec.fallback_reason is None
-        assert is_faithful(rec.rationale, [rec.model_dump_json(exclude={"rationale"})]), (rec.pnr, rec.rationale)
+        assert check_rationale(rec.rationale, allowed_for_recommendation(rec)) is None, (rec.pnr, rec.rationale)
 
 
 def test_stub_rationales_say_why():
@@ -101,8 +101,8 @@ class RecordingReasoner:
 
     def run(self, case):
         self.seen.append(case.pnr.pnr)
-        from rebooking_copilot.reasoning import AgentRun
-        return AgentRun(answer=None, failure="recording only", trace=(), seen_text=())
+        self.case = case
+        return AgentRun(answer=None, failure="recording only")
 
 
 def test_only_review_level_or_multi_offer_bookings_reach_the_agent():
@@ -140,7 +140,8 @@ def test_agent_can_approve_a_review_level_offer_capped_at_medium():
     assert rec.confidence is Confidence.MEDIUM  # review-level cap (D-16), although 140 ≥ 64 would be HIGH
     assert Reason.REFUNDABILITY_LOST in rec.reasons
     assert rec.reasoner == f"claude:{DEFAULT_MODEL}" and rec.prompt_version == PROMPT_VERSION
-    assert rec.rationale == FAITHFUL_ZC and rec.fallback_reason is None
+    assert rec.rationale.endswith(f"Agent's view: {FAITHFUL_ZC}") and rec.fallback_reason is None
+    assert rec.rationale.index("not refundable") < rec.rationale.index("Agent's view")  # the code states the trade-off first
     assert [t.split("(")[0] for t in rec.agent_trace] == ["check_policy", "compute_saving", "submit_recommendation"]
 
 
@@ -201,7 +202,7 @@ def _zc_fallback(*script, **kwargs):
         ((ai(tool_call("submit_recommendation", chosen_offer_id="OF-4001", decision="MAYBE", rationale="x", confidence_ceiling="HIGH")),), "invalid"),
         ((ai(tool_call("submit_recommendation", decision="REBOOK")),), "invalid"),
         ((submit(None, "REBOOK", "Rebook."),), "eligible"),
-        ((ai(text="I think you should rebook.", stop="end_turn"),), "no submission"),
+        ((ai(text="I think you should rebook.", stop="end_turn"), ai(text="Rebook it.", stop="end_turn")), "no submission"),
         ((ai(stop="refusal"),), "refusal"),
         (tuple(ai(tool_call("check_policy", pnr_id="ZC3N1D", offer_id="OF-4001")) for _ in range(6)), "turn budget"),
     ],
@@ -294,10 +295,34 @@ def test_numbers_are_normalised():
     assert numbers_in("140.00 USD, 1,947.96 EUR and 22:05") == {Decimal("140"), Decimal("1947.96"), Decimal("22"), Decimal("5")}
 
 
-def test_faithfulness():
-    assert is_faithful("Saves 140 USD.", ['{"net": "140.00 USD"}'])
-    assert not is_faithful("Saves 141 USD.", ['{"net": "140.00 USD"}'])
-    assert is_faithful("No numbers at all.", [])
+def _zc_case():
+    reasoner = RecordingReasoner()
+    evaluate(*fixture_inputs(), reasoner=reasoner)
+    return reasoner.case
+
+
+@pytest.mark.parametrize(
+    "text, ok",
+    [
+        ("Saves 140.00 USD net; the new fare is 500.00 USD instead of 640.00 USD.", True),
+        ("AV24 leaves at 22:05 on 2026-10-10 as booked; OF-4001 has 4 seats.", True),
+        ("No numbers at all.", True),
+        ("Saves 141.00 USD.", False),  # invented
+        ("Saves 140.00 EUR.", False),  # wrong currency
+        ("Saves -140.00 USD.", False),  # wrong sign
+        ("A 22% saving.", False),  # percentages
+        ("One hundred and forty dollars cheaper.", False),  # numbers in words
+        ("Saves 999.99 USD.", False),
+    ],
+)
+def test_rationale_number_check(text, ok):
+    assert (check_rationale(text, allowed_for_case(_zc_case())) is None) is ok
+
+
+def test_a_real_amount_misattributed_still_passes():
+    # Documented limitation (DESIGN §3): the check can't tell which real amount a sentence is about. 640.00 USD is the
+    # fare paid, not the saving. That's why every structured field is code-built and the code's summary comes first.
+    assert check_rationale("Saves 640.00 USD net.", allowed_for_case(_zc_case())) is None
 
 
 # --- stub mode never imports LangChain (D-00d, ADR-0003) -----------------------------------------------------------

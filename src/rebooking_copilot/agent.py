@@ -2,12 +2,14 @@
 
 `ChatAnthropic` (langchain-anthropic, which calls the official Anthropic SDK) with `bind_tools(tool_choice="auto",
 strict=True)`. Forced tool choice is rejected by Claude Sonnet 5.5, so the instruction to submit lives in the
-prompt and a missing submission is a fallback. The loop is append-only (thinking blocks are passed back as
-returned), bounded by a turn and time budget, and never raises: every failure is an `AgentRun.failure`.
-LangChain is imported lazily, so stub mode never loads it (ADR-0003).
+prompt, a text-only reply gets one reminder, and a missing submission is a fallback. The loop is append-only
+(thinking blocks are passed back as returned), bounded by a turn and time budget, and never raises: every failure
+is an `AgentRun.failure`. LangChain is imported lazily, so stub mode never loads it (ADR-0003).
 """
 
+import hashlib
 import json
+import os
 import time
 from collections.abc import Callable
 
@@ -22,9 +24,11 @@ from rebooking_copilot.reasoning import (
 DEFAULT_MODEL = "claude-sonnet-5-5"  # D-36
 DEFAULT_EFFORT = "medium"  # D-36; Sonnet 5.5's own default is high, so it is set explicitly
 MAX_TURNS = 6  # D-25
-TIME_BUDGET_S = 30.0  # D-25
-REQUEST_TIMEOUT_S = 20.0
+TIME_BUDGET_S = 30.0  # D-25: a call starts only if a full request timeout still fits, so the total stays within it
+REQUEST_TIMEOUT_S = 10.0
+MAX_TOKENS = 16_000
 REFUSAL_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+REMINDER = "Call submit_recommendation now with your decision. Do not answer in plain text."
 
 
 # Tool schemas. The class names are the tool names; arguments are ids only (D-25).
@@ -58,9 +62,9 @@ class get_fx_rate(BaseModel):  # noqa: N801
 class submit_recommendation(BaseModel):  # noqa: N801
     """Submit the final recommendation. Call exactly once, at the end."""
 
-    chosen_offer_id: str | None = Field(description="An offer id from FACTS, or null for none.")
+    chosen_offer_id: str | None = Field(description="REBOOK: the offer to book. NEEDS_REVIEW: the offer a human should look at, or null. DO_NOT_REBOOK: null.")
     decision: AgentDecision = Field(description="REBOOK, DO_NOT_REBOOK or NEEDS_REVIEW.")
-    rationale: str = Field(description="Two to four sentences for the human agent. Only numbers that appear in FACTS or tool results.")
+    rationale: str = Field(description="Two to four sentences for the human agent. Amounts only as copied from FACTS, with their currency.")
     confidence_ceiling: Confidence = Field(description="LOW, MEDIUM or HIGH; can only lower the system's confidence.")
 
 
@@ -68,19 +72,32 @@ TOOLS = [find_candidates, check_policy, compute_saving, get_fx_rate, submit_reco
 
 
 def chat_anthropic(model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT):
-    """The production chat model. Credentials resolve the SDK's normal way (ANTHROPIC_API_KEY, `ant auth login`, ...)."""
+    """The production chat model. Needs ANTHROPIC_API_KEY: ChatAnthropic passes the key explicitly, so `ant auth`
+    profiles aren't used (D-41)."""
     from langchain_anthropic import ChatAnthropic
 
     return ChatAnthropic(
         model=model,
-        max_tokens=16_000,
+        max_tokens=MAX_TOKENS,
         output_config={"effort": effort},
         default_request_timeout=REQUEST_TIMEOUT_S,
-        max_retries=1,
+        max_retries=0,  # the loop's budget and the deterministic fallback replace retries
         # Refusal fallback: if Sonnet 5.5 declines on safety grounds, the API re-runs the request on a fallback model.
+        # Top-level cache_control caches the stable system prompt + tools across turns and bookings.
         betas=[REFUSAL_FALLBACK_BETA],
-        model_kwargs={"fallbacks": "default"},
+        model_kwargs={"fallbacks": "default", "cache_control": {"type": "ephemeral"}},
     )
+
+
+def _resendable(reply):
+    """LangChain stores the SDK's fallback block with the Python field name `from_`; the API expects `from` (D-41)."""
+    if not isinstance(reply.content, list):
+        return reply
+    fixed = [
+        {("from" if k == "from_" else k): v for k, v in block.items()} if isinstance(block, dict) and "from_" in block else block
+        for block in reply.content
+    ]
+    return reply.model_copy(update={"content": fixed}) if fixed != reply.content else reply
 
 
 class ClaudeReasoner:
@@ -92,56 +109,75 @@ class ClaudeReasoner:
         effort: str = DEFAULT_EFFORT,
         max_turns: int = MAX_TURNS,
         time_budget_s: float = TIME_BUDGET_S,
+        request_timeout_s: float = REQUEST_TIMEOUT_S,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.llm = llm if llm is not None else chat_anthropic(model, effort)
         self.id = f"claude:{model}"
         self.prompt_version = PROMPT_VERSION
-        self.max_turns, self.time_budget_s, self.clock = max_turns, time_budget_s, clock
+        prompt = PROMPT_PATH.read_text()
+        self.config = {"model": model, "effort": effort, "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest()}
+        self.max_turns, self.time_budget_s, self.request_timeout_s, self.clock = max_turns, time_budget_s, request_timeout_s, clock
 
     def run(self, case: AgentCase) -> AgentRun:
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-        user = render_user_message(case)
-        seen, trace = [user], []
+        trace, calls, served = [], [], None
+        reminded = False
 
         def fail(reason: str) -> AgentRun:
-            return AgentRun(failure=reason, trace=tuple(trace), seen_text=tuple(seen))
+            return AgentRun(failure=reason, trace=tuple(trace), calls=tuple(calls), served_model=served)
 
         bound = self.llm.bind_tools(TOOLS, tool_choice="auto", strict=True)  # never forced: a 400 on Sonnet 5.5
-        messages = [SystemMessage(PROMPT_PATH.read_text()), HumanMessage(user)]
+        messages = [SystemMessage(PROMPT_PATH.read_text()), HumanMessage(render_user_message(case))]
         start = self.clock()
         for _ in range(self.max_turns):
-            if self.clock() - start > self.time_budget_s:
+            if self.time_budget_s - (self.clock() - start) < self.request_timeout_s:
                 return fail(f"time budget exhausted ({self.time_budget_s:.0f} s)")
+            t0 = time.monotonic()
             try:
                 reply = bound.invoke(messages)
             except Exception as exc:  # network, auth, rate limit, ...: none may crash the run
                 return fail(f"api error: {type(exc).__name__}: {exc}")
-            messages.append(reply)
-            if reply.response_metadata.get("stop_reason") == "refusal":
-                return fail("refusal: the model declined this request")
+            meta = reply.response_metadata or {}
+            stop = meta.get("stop_reason")
+            served = meta.get("model") or served
+            usage = meta.get("usage") or {}
+            calls.append(f"model={served} stop={stop} in={usage.get('input_tokens')} out={usage.get('output_tokens')} ms={int((time.monotonic() - t0) * 1000)}")
+            messages.append(_resendable(reply))
+            if stop == "refusal":
+                category = (meta.get("stop_details") or {}).get("category")
+                return fail(f"refusal: the model declined this request (category: {category})")
+            if stop == "max_tokens":
+                return fail("max_tokens: the reply was cut off before a complete submission")
             if not reply.tool_calls:
-                return fail("no submission: the model answered without calling submit_recommendation")
+                if reminded:
+                    return fail("no submission: the model answered in text twice without calling submit_recommendation")
+                reminded = True
+                messages.append(HumanMessage(REMINDER))
+                continue
             results, submission = [], None
             for call in reply.tool_calls:
                 trace.append(f"{call['name']}({json.dumps(call['args'], sort_keys=True)})")
                 if call["name"] == "submit_recommendation":
                     submission = call["args"]
-                    content = json.dumps({"status": "received"})
+                    content, is_error = json.dumps({"status": "received"}), False
                 else:
-                    content = call_tool(case, call["name"], call["args"])
-                    seen.append(content)
-                results.append(ToolMessage(content=content, tool_call_id=call["id"]))
+                    content, is_error = call_tool(case, call["name"], call["args"])
+                results.append(ToolMessage(content=content, tool_call_id=call["id"], status="error" if is_error else "success"))
             if submission is not None:
                 answer = parse_answer(submission)
-                return fail(answer) if isinstance(answer, str) else AgentRun(answer=answer, trace=tuple(trace), seen_text=tuple(seen))
+                if isinstance(answer, str):
+                    return fail(answer)
+                return AgentRun(answer=answer, trace=tuple(trace), calls=tuple(calls), served_model=served)
             messages.extend(results)
         return fail(f"turn budget exhausted ({self.max_turns} turns without a submission)")
 
 
 def make_claude_reasoner() -> ClaudeReasoner | UnavailableReasoner:
-    """Build the production reasoner, or explain why it can't run (missing extra, bad config, ...)."""
+    """Build the production reasoner, or explain why it can't run (missing key, missing extra, bad config, ...)."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return UnavailableReasoner("ANTHROPIC_API_KEY is not set (LangChain's ChatAnthropic doesn't read `ant auth` profiles)")
     try:
         return ClaudeReasoner()
     except Exception as exc:

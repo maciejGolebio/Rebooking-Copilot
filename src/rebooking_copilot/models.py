@@ -18,6 +18,8 @@ Airport = Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
 Carrier = Annotated[str, Field(pattern=r"^[A-Z0-9]{2}$")]
 FlightNumber = Annotated[str, Field(pattern=r"^[A-Z0-9]{2}[0-9]{1,4}[A-Z]?$")]
 FareBasis = Annotated[str, Field(pattern=r"^[A-Za-z0-9]{1,15}$")]
+# Supplier ids reach the agent's FACTS, so only plain id characters are allowed (D-41: no delimiters, no spaces).
+OfferId = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")]
 Count = Annotated[StrictInt, Field(ge=0, le=9_999)]
 
 
@@ -70,7 +72,7 @@ class Route(Record):
 
 
 class Offer(Record):
-    offer_id: Annotated[str, Field(min_length=1)]
+    offer_id: OfferId
     route: Route
     carrier: Carrier
     flight_number: FlightNumber

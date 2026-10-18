@@ -9,7 +9,7 @@ It scores the structure and the prompt(s), not whether a live model ran.
 A `Reasoner` interface with two implementations:
 - a deterministic **stub**, the default;
 - an optional **Claude** adapter, enabled when `ANTHROPIC_API_KEY` is set *and* LLM mode is selected explicitly.
-  The exact switch is defined in `/slice reasoner`.
+  The exact switch is D-37 ([ADR-0009](0009-claude-mode-runtime.md)).
 
 Both share one input and output schema. A missing key, a timeout, an API error or schema-invalid output all fall
 back to the stub, and the output records the fallback reason. The prompt is a versioned file. The model's decision

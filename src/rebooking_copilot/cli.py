@@ -1,8 +1,8 @@
 """Command-line entrypoint: load and validate the fixtures, recommend per booking, write recommendations.json.
 
 Stub mode (default) is deterministic and needs no network or key. Claude mode (`--reasoner claude`, or
-REBOOKING_REASONER=claude; the flag wins) needs the `llm` extra and Anthropic credentials, and falls back to the
-stub per booking whenever the agent can't be used (D-37).
+REBOOKING_REASONER=claude; the flag wins) needs langchain-anthropic and ANTHROPIC_API_KEY, calls a paid API, and
+falls back to the stub per booking whenever the agent can't be used.
 """
 
 import argparse

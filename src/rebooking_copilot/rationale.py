@@ -1,11 +1,12 @@
-"""Template rationales for stub mode and fallbacks.
+"""Template rationales: the full text in stub mode, and the code's own summary in front of the agent's view.
 
-Every number comes from the recommendation's own breakdown or assessments, so the text is faithful by
-construction (the same faithfulness check the agent's text must pass, D-25).
+Every number comes from the recommendation's own breakdown or assessments, shown exactly (rounded only when
+rounding changes nothing), so the text passes the same number check the agent's text must pass (D-25, D-41).
 """
 
+from rebooking_copilot.money import Money
 from rebooking_copilot.outcome import Action
-from rebooking_copilot.policy import REVIEW_LEVEL_REASONS, Reason
+from rebooking_copilot.policy import REVIEW_LEVEL_REASONS, Reason, Tier
 
 _PHRASES = {
     Reason.FEWER_BAGS: "it includes fewer bags",
@@ -24,6 +25,12 @@ _PHRASES = {
 }
 
 
+def _m(money: Money) -> str:
+    """Rounded to minor units when that is exact, otherwise the exact amount."""
+    rounded = money.quantized()
+    return str(rounded) if rounded.amount == money.amount else f"{money.amount.normalize():f} {money.currency}"
+
+
 def _join(phrases: list[str]) -> str:
     return phrases[0] if len(phrases) == 1 else ", ".join(phrases[:-1]) + " and " + phrases[-1]
 
@@ -31,23 +38,41 @@ def _join(phrases: list[str]) -> str:
 def _fx_clause(bd) -> str:
     if bd.fx is None:
         return ""
-    return f" (converted from {bd.offer_price_per_passenger} at {bd.fx.rate} {bd.fx.from_currency}→{bd.fx.to_currency}, source {bd.fx.source})"
+    return f" (converted from {_m(bd.offer_price_per_passenger)} at the {bd.fx.from_currency}→{bd.fx.to_currency} rate {bd.fx.rate}, source {bd.fx.source})"
+
+
+def _saving_clause(bd) -> str:
+    """The net saving, plus the counted saving when the settlement policy discounts credit."""
+    text = f"after {_m(bd.change_fees)} in change fees the net saving is {_m(bd.net_saving)}"
+    if bd.counted_net_saving != bd.net_saving:
+        text += f", counted as {_m(bd.counted_net_saving)} under the settlement policy"
+    return text
 
 
 def _candidate_reasons(a) -> str:
     phrases = []
     for reason in a.reasons:
         if reason is Reason.NET_SAVING_BELOW_THRESHOLD and a.breakdown is not None:
-            phrases.append(f"the net saving of {a.breakdown.counted_net_saving} is below the {a.breakdown.threshold} threshold")
+            phrases.append(f"the counted saving of {_m(a.breakdown.counted_net_saving)} is below the {_m(a.breakdown.threshold)} threshold")
         elif reason in _PHRASES:
             phrases.append(_PHRASES[reason])
     return f"{a.offer_id}: {_join(phrases)}" if phrases else a.offer_id
 
 
-def explain(rec) -> str:
+def _tails(reasons: set) -> str:
+    tail = ""
+    if Reason.OFFER_DATA_REJECTED in reasons:
+        tail += " An offer on this route was rejected as invalid data, so the picture is incomplete."
+    if Reason.CANDIDATE_NOT_EVALUATED in reasons:
+        tail += " Another offer on this route couldn't be priced (no usable FX rate), so the picture is incomplete."
+    return tail
+
+
+def explain(rec, *, agent: bool = False) -> str:
     """A short, human-readable reason for the recommendation, built only from its own fields."""
     reasons = set(rec.reasons)
-    tail = " An offer on this route was rejected as invalid data, so the picture is incomplete." if Reason.OFFER_DATA_REJECTED in reasons else ""
+    tail = _tails(reasons)
+    review = [_PHRASES[r] for r in rec.reasons if r in REVIEW_LEVEL_REASONS]
 
     if Reason.EVALUATION_ERROR in reasons:
         return f"Not evaluated: an unexpected error occurred ({rec.error}). A human should check this booking."
@@ -59,30 +84,32 @@ def explain(rec) -> str:
 
     bd = rec.breakdown
     if rec.action is Action.REBOOK and bd is not None:
+        traded = f" Trade-off: {_join(review)}." if review else ""
         credit = " The difference comes back as travel credit, counted under the active settlement policy." if Reason.SAVING_AS_CREDIT in reasons else ""
         return (
-            f"Rebook to {rec.chosen_offer_id}: {bd.offer_price_per_passenger_in_ticket_currency} per passenger instead of "
-            f"{bd.paid_per_passenger}{_fx_clause(bd)}. After {bd.change_fees} in change fees the net saving is "
-            f"{bd.counted_net_saving}, above the {bd.threshold} threshold; confidence {rec.confidence}.{credit}{tail}"
+            f"Rebook to {rec.chosen_offer_id}: {_m(bd.offer_price_per_passenger_in_ticket_currency)} per passenger instead of "
+            f"{_m(bd.paid_per_passenger)}{_fx_clause(bd)}; {_saving_clause(bd)}, at or above the {_m(bd.threshold)} threshold; "
+            f"confidence {rec.confidence}.{traded}{credit}{tail}"
         )
     if rec.action is Action.NEEDS_REVIEW and Reason.LLM_DISAGREES_WITH_POLICY in reasons and bd is not None:
         return (
-            f"The policy finds a clean saving of {bd.counted_net_saving} on {rec.chosen_offer_id}, but the agent advised "
+            f"The policy finds a clean saving on {rec.chosen_offer_id} ({_saving_clause(bd)}), but the agent advised "
             f"against it, so a human should decide.{tail}"
         )
-    if rec.action is Action.NEEDS_REVIEW and Reason.SAVING_AS_CREDIT in reasons and bd is not None:
+    if rec.action is Action.NEEDS_REVIEW and Reason.SAVING_AS_CREDIT in reasons and bd is not None and not review:
         return (
-            f"{rec.chosen_offer_id} is the same flight and product, {bd.gross_saving} cheaper in total{_fx_clause(bd)}; after "
-            f"{bd.change_fees} in change fees the net saving is {bd.counted_net_saving}. The ticket is non-refundable, so the "
-            f"difference would come back as travel credit, which the cash-only policy doesn't count as a saving. A human "
-            f"should decide.{tail}"
+            f"{rec.chosen_offer_id} is the same flight and product, {_m(bd.gross_saving)} cheaper in total{_fx_clause(bd)}; "
+            f"{_saving_clause(bd)}. The ticket is non-refundable, so the difference would come back as travel credit, which "
+            f"the cash-only policy doesn't count as a saving. A human should decide.{tail}"
         )
-    review = [_PHRASES[r] for r in rec.reasons if r in REVIEW_LEVEL_REASONS]
-    if rec.action is Action.NEEDS_REVIEW and review and bd is not None:
-        return (
-            f"{rec.chosen_offer_id} would save {bd.counted_net_saving} net{_fx_clause(bd)}, but {_join(review)}. That "
-            f"trade-off needs a human decision.{tail}"
-        )
+    if rec.action is Action.NEEDS_REVIEW and bd is not None:
+        why = f", but {_join(review)}. That trade-off needs a human decision." if review else ". The agent asked a human to decide."
+        return f"{rec.chosen_offer_id} would save {_m(bd.counted_net_saving)} net{_fx_clause(bd)}{why}{tail}"
+    eligible = [a for a in rec.candidates if a.tier is not Tier.INELIGIBLE]
+    if agent and eligible:
+        offered = "; ".join(_candidate_reasons(a) for a in eligible)
+        verdict = "declined the eligible offers" if rec.action is Action.DO_NOT_REBOOK else "asked a human to decide between the eligible offers"
+        return f"The agent {verdict} ({offered}).{tail}"
     if rec.action is Action.NEEDS_REVIEW and Reason.CURRENCY_MISMATCH_NO_FX in reasons:
         return "An offer is priced in another currency and no usable FX rate was available, so the saving couldn't be computed." + tail
     if rec.candidates:

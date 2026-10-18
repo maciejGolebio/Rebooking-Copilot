@@ -2,12 +2,12 @@
 - **Status:** Accepted · **Date:** 2026-10-18 · **Decided by:** user · **Log:** D-19, D-21, D-22, D-24, D-25
 
 ## Context
-`/design-doc` compared three options:
+I compared three options:
 - **A:** a deterministic pipeline with one structured LLM decision inside the eligible set.
 - **B:** an LLM agent that investigates cases through read-only deterministic tools.
 - **C:** a scale-first incremental pipeline.
 
-The setup recommended A. The user chose **B**, which matches the brief's "AI agent" wording and gives the model a real
+The AI setup recommended A; I chose **B**, which matches the brief's "AI agent" wording and gives the model a real
 investigative role. ADR-0004 and ADR-0005 still bind it: every number, hard constraint and the eligible set come from code.
 
 ## Decision
@@ -48,7 +48,7 @@ investigative role. ADR-0004 and ADR-0005 still bind it: every number, hard cons
   exhausted budget, a timeout and tool-argument abuse.
 
 ## Alternatives considered
-- **A, a safety-first pipeline with one LLM call:** the simplest boundary, fully testable, cheapest. It was rejected by the user in
+- **A, a safety-first pipeline with one LLM call:** the simplest boundary, fully testable, cheapest. I rejected it in
   favour of a real agent role. It is DESIGN.md's main considered alternative.
 - **A Hybrid of A and B:** A for every case, and the agent only for hard ones. Close to what the D-21 router does, but without
   the agent's investigation step on simple cases.

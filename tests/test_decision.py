@@ -262,8 +262,9 @@ def test_decision_rules_hold_for_generated_bookings(scenario):
         assert rec.confidence is Confidence.LOW
     elif rec.action is Action.REBOOK:
         bd = rec.breakdown
-        drops = (bd.fx is not None) + (bd.counted_net_saving.amount < policy.confidence_margin_multiple * bd.threshold.amount)
-        assert rec.confidence is (Confidence.HIGH, Confidence.MEDIUM, Confidence.LOW)[drops]
+        unpriced = any(Reason.CURRENCY_MISMATCH_NO_FX in a.reasons for a in rec.candidates)  # D-41
+        drops = (bd.fx is not None) + (bd.counted_net_saving.amount < policy.confidence_margin_multiple * bd.threshold.amount) + unpriced
+        assert rec.confidence is (Confidence.HIGH, Confidence.MEDIUM, Confidence.LOW)[min(drops, 2)]
     else:
         settled = all(a.breakdown.net_saving.amount <= 0 or set(a.reasons) & NON_MONEY_BLOCKS for a in rec.candidates)
         assert rec.confidence is (Confidence.HIGH if settled else Confidence.MEDIUM)
@@ -607,10 +608,11 @@ def test_missing_fx_beats_do_not_rebook_when_nothing_is_eligible():
 
 
 def test_an_eligible_offer_is_still_chosen_when_another_has_no_fx():
-    # OF-3002 in EUR on the same flight: 2200 − 2000 = 200 ≥ 110 → REBOOK without FX; 200 < 220 → MEDIUM.
+    # OF-3002 in EUR on the same flight: 2200 − 2000 = 200 ≥ 110 → REBOOK without FX; 200 < 220 → MEDIUM; OF-3001
+    # couldn't be priced, so the picture is incomplete → one more band down, CANDIDATE_NOT_EVALUATED (D-41).
     offers = [raw_offer("OF-3001"), offer("OF-3001", offer_id="OF-3002", currency="EUR", price="2000.00")]
     (rec,) = run([raw_booking("RT5K8B")], offers, fx=MockFxProvider(rates={}))
-    assert summary(rec) == (Action.REBOOK, "OF-3002", eur("200.00"), Confidence.MEDIUM, ())
+    assert summary(rec) == (Action.REBOOK, "OF-3002", eur("200.00"), Confidence.LOW, (Reason.CANDIDATE_NOT_EVALUATED,))
 
 
 @pytest.mark.parametrize(

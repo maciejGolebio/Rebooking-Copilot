@@ -91,6 +91,7 @@ class Reason(StrEnum):
     OFFER_DATA_REJECTED = "OFFER_DATA_REJECTED"  # a matching offer was rejected as bad data: the picture is incomplete
     EVALUATION_ERROR = "EVALUATION_ERROR"  # unexpected failure while evaluating this booking; abstain
     LLM_DISAGREES_WITH_POLICY = "LLM_DISAGREES_WITH_POLICY"  # the agent declined a clean saving the policy approves (D-22)
+    CANDIDATE_NOT_EVALUATED = "CANDIDATE_NOT_EVALUATED"  # another offer on the route had no usable FX rate (D-41)
 
 
 HARD_BLOCKS = frozenset({

@@ -50,12 +50,14 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-31 | Seat-ledger rules | REBOOK-bound bookings are served before NEEDS_REVIEW-bound ones; within a group, by the counted saving of the offer the booking would pick (D-29), then input index; mixed currencies are ranked in the offer's currency via the inverse of each booking's own FX quote (ranking only) | user | accepted |
 | D-32 | Fingerprint scope | Per booking: the booking, its candidate offers, policy, FX quotes, as_of, reasoner. Seat contention with other bookings can change the final recommendation under the same fingerprint (documented) | user | accepted |
 | D-33 | Lead time | An offer is ineligible (DEPARTS_TOO_SOON) unless its earliest possible departure (local time read as UTC+14) is ≥ as_of + 24 h | user | accepted |
-| D-34 | Price anomaly | An offer more than 60% cheaper than the paid fare per passenger (in the ticket currency) is review-level (PRICE_ANOMALY) | user | accepted |
+| D-34 | Price anomaly | An offer more than 60% cheaper than the paid fare per passenger (in the ticket currency) is review-level (PRICE_ANOMALY) | user | accepted; the Claude-mode MEDIUM cap superseded by D-40 |
 | D-35 | Review hardening | Duplicate ids rejected; offer price > 0; FX quotes validated; per-booking isolation; rejected offers on the route → OFFER_DATA_REJECTED; freed seats re-offered; bounded amounts in a fixed Decimal context; fingerprint adds captured_at + engine | default | accepted |
 | D-36 | Model and effort | `claude-sonnet-5-5` at effort `medium` (set explicitly); refusal fallback on by default ([ADR-0009](adr/0009-claude-mode-runtime.md)) | user (fallback: default) | accepted |
-| D-37 | Claude-mode switch | `--reasoner claude` or `REBOOKING_REASONER=claude`; the flag wins; no credentials → per-booking fallback, announced | user | accepted |
+| D-37 | Claude-mode switch | `--reasoner claude` or `REBOOKING_REASONER=claude`; the flag wins; no credentials → per-booking fallback, announced | user | accepted; credential wording refined by D-41 |
 | D-38 | Agent loop | Explicit loop on LangChain primitives (`ChatAnthropic.bind_tools`, tool_choice auto, strict tools), 6 turns / 30 s | user | accepted |
-| D-39 | Validator details | Agent works on the post-ledger seat-feasible set; any failed check → full deterministic fallback; veto shows the best clean offer; agent REBOOK moves the seat | default | accepted |
+| D-39 | Validator details | Agent works on the post-ledger seat-feasible set; any failed check → full deterministic fallback; veto shows the best clean offer; agent REBOOK moves the seat | default | accepted; refined by D-40, D-41 |
+| D-40 | Agent and PRICE_ANOMALY | The agent can never REBOOK an offer flagged PRICE_ANOMALY; such a submission falls back to the deterministic NEEDS_REVIEW | user | accepted |
+| D-41 | Review hardening (round 2) | Typed rationale number check; strict offer-id pattern and escaped FACTS; agent outcomes keep credit savings visible and always carry a reason; an unpriced sibling offer lowers confidence; seats freed by the agent are re-offered; LangChain runtime fixes; fixed-point JSON amounts; prompt v2 | default | accepted |
 
 ## Entries
 
@@ -322,7 +324,8 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 - **Context:** a zero price is now invalid data. A wildly cheap offer could still be a feed error.
 - **Options:** more than 60% off → review · more than 80% off → review · no guard
 - **Decision:** an offer whose price in the ticket currency is below paid × (1 − 0.60) is review-level (PRICE_ANOMALY).
-  It is never approved by the stub, and is capped at MEDIUM in Claude mode. The fixtures' biggest discount is 42% (HB6W9E/OF-5002).
+  It is never approved by the stub, and is capped at MEDIUM in Claude mode (*superseded by D-40: the agent can't approve
+  it at all*). The fixtures' biggest discount is 42% (HB6W9E/OF-5002).
 - **Consequence:** money-safety invariant 4 has one deliberate exception. A price rising *out of* the anomaly band can
   make an offer eligible. The property test asserts the invariant only for offers outside the band.
 - **Decided by:** user · **Status:** accepted · configurable (`max_plausible_discount`)
@@ -357,7 +360,8 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 - **Options:** a `--reasoner` flag · the `REBOOKING_REASONER` env var · both
 - **Decision:** both; the flag overrides the env var. Credentials resolve the SDK's normal way. Without them, or without
   the `llm` extra, the CLI says so, and every routed booking falls back with the reason recorded.
-- **Decided by:** user · **Status:** accepted
+- **Decided by:** user · **Status:** accepted. *Refined by D-41:* LangChain passes the API key explicitly, so "the SDK's
+  normal way" means `ANTHROPIC_API_KEY` only; `ant auth` profiles aren't read.
 
 ### D-38: Agent loop (2026-10-18), refines D-20
 - **Options:** an explicit loop on LangChain primitives (recommended) · LangChain `create_agent` · the Anthropic SDK Tool Runner
@@ -381,10 +385,56 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 - The D-22 veto shows the best clean offer and its saving, and the rationale prefixes the template to the agent's view.
 - **Decided by:** default · **Status:** accepted
 
+### D-40: The agent can't approve a price anomaly (2026-10-18), supersedes part of D-34
+- **Context:** the LLM-boundary review showed that under D-34 an agent REBOOK onto a PRICE_ANOMALY offer was accepted at
+  MEDIUM. An implausibly low price is a possible feed error: there's no trade-off for the model to weigh, and a wrong
+  rebook onto a phantom fare costs more than a missed saving.
+- **Options:** never let the agent approve it (review only) · keep the D-34 MEDIUM cap · cap it at LOW
+- **Decision:** review only. In `_apply_agent`, after the settlement gate, an agent REBOOK onto an offer with
+  PRICE_ANOMALY is a full fallback ("policy forbids REBOOK … (D-40)"), so the booking stays NEEDS_REVIEW. Prompt v2 says so too.
+- **Decided by:** user · **Status:** accepted
+- **Consequences / where it shows:** DESIGN.md §3 (validator step 4), §4 policy table, §7 row 8;
+  `tests/test_review2_regressions.py::test_a_price_anomaly_is_never_approved_by_the_agent`.
+
+### D-41: Hardening from the second review round (2026-10-18)
+- **Context:** three independent reviewers (money safety, the LLM boundary, an assessor's read) checked the finished
+  prototype. Every serious finding was reproduced before fixing. Regression tests are in `tests/test_review2_regressions.py`.
+- **Decision (defaults):**
+  1. **Number check:** the rationale is checked against typed (amount, currency) pairs from this booking's facts, not
+     against any number seen. Ids, flight numbers, ISO dates and times and the FX source are stripped first; `%` and number
+     words are rejected. Known limit: a real amount attributed to the wrong thing passes (a test documents it). The
+     code's summary comes first in the rationale, so the human reads the right numbers before "Agent's view: …".
+  2. **Injection:** tool error messages no longer echo the agent's arguments. Offer ids must match
+     `^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$` (else DATA_INVALID). The JSON in FACTS and tool results escapes `<` and `>`.
+  3. **Agent-path visibility:** if the agent declines a credit saving under `cash_only`, the result is NEEDS_REVIEW with
+     SAVING_AS_CREDIT and the saving shown (D-30). Every non-REBOOK agent outcome carries a reason, and a review-level
+     REBOOK states its trade-off.
+  4. **Incomplete picture:** a chosen offer whose sibling on the route couldn't be priced (no FX) gets
+     CANDIDATE_NOT_EVALUATED, and a REBOOK drops one confidence band (at most two drops with OFFER_DATA_REJECTED).
+  5. **Seats after the agent:** a seat the agent frees by choosing another offer is re-offered, by ledger priority, to
+     bookings the agent didn't decide. Those get a fresh deterministic recommendation.
+  6. **LangChain runtime:**
+     - the refusal-fallback block is resent with the key `from`, because LangChain stores it as `from_`;
+     - the serving model is recorded (`claude:<model>`), along with a per-call log line;
+     - a text-only reply gets one reminder;
+     - `max_tokens` and a refusal (with its category) are fallbacks;
+     - a call starts only if its 10 s timeout fits in the 30 s budget;
+     - `max_retries=0`;
+     - prompt caching is requested (top-level `cache_control`);
+     - Claude mode needs `ANTHROPIC_API_KEY`, because ChatAnthropic passes `api_key=""` otherwise and `ant auth`
+       profiles aren't read (refines D-37);
+     - the fingerprint covers the model, the effort and the prompt hash.
+  7. **Output:** JSON amounts are written in fixed point, never `1E+3`. Rationale templates show exact amounts, and
+     "counted as X" when the settlement policy discounts credit.
+  8. **Prompt v2** (`rebooking_agent_v2.md`; v1 kept): whose saving it is, an injection rule, a reason-code glossary,
+     what `chosen_offer_id` means for each decision, a strict number rule, and submit exactly once.
+- **Decided by:** default (fix choices confirmed by the user) · **Status:** accepted
+- **Consequences / where it shows:** DESIGN.md §3, §4, §5, §8; ADR-0009; `reasoning.py`, `agent.py`, `decision.py`, `rationale.py`.
+
 <!--
 Entry format:
 
-### D-40: <topic> (YYYY-MM-DD)
+### D-NN: <topic> (YYYY-MM-DD)
 - **Context:** 1–2 lines; cite PNRs or fixture facts where relevant.
 - **Options:** A) …  B) …  C) …
 - **Decision:** …

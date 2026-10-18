@@ -149,7 +149,8 @@
           "type": "string"
         },
         "rate": {
-          "gt": 0,
+          "description": "Exact decimal, fixed-point notation",
+          "pattern": "^-?\\d+(\\.\\d+)?$",
           "title": "Rate",
           "type": "string"
         },
@@ -203,6 +204,8 @@
       "additionalProperties": false,
       "properties": {
         "amount": {
+          "description": "Exact decimal, fixed-point notation",
+          "pattern": "^-?\\d+(\\.\\d+)?$",
           "title": "Amount",
           "type": "string"
         },
@@ -307,7 +310,8 @@
         "UNSUPPORTED_ITINERARY",
         "OFFER_DATA_REJECTED",
         "EVALUATION_ERROR",
-        "LLM_DISAGREES_WITH_POLICY"
+        "LLM_DISAGREES_WITH_POLICY",
+        "CANDIDATE_NOT_EVALUATED"
       ],
       "title": "Reason",
       "type": "string"
@@ -317,6 +321,14 @@
       "properties": {
         "action": {
           "$ref": "#/$defs/Action"
+        },
+        "agentCalls": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Agentcalls",
+          "type": "array"
         },
         "agentTrace": {
           "default": [],

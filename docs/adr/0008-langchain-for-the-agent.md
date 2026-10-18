@@ -3,7 +3,7 @@
 
 ## Context
 ADR-0003 deferred the choice between the direct SDK and LangChain. ADR-0007 needs a tool-calling agent loop. The
-setup recommended the direct Anthropic SDK; the user chose **LangChain**.
+AI setup recommended the direct Anthropic SDK; I chose **LangChain**.
 
 ## Decision
 - Use `langchain` and `langchain-anthropic` (ChatAnthropic, a tool-calling agent) as the optional extra `llm`.
@@ -12,6 +12,9 @@ setup recommended the direct Anthropic SDK; the user chose **LangChain**.
 - In production, the approve → re-price → re-validate → execute flow is described on **LangGraph**, using `interrupt()` for
   human approval and checkpointed state. LangGraph already arrives as a dependency of `langchain`.
 - Resolved on Python 3.14 (2026-10-18): `langchain 1.4.6`, `langchain-anthropic 1.7.6`, `langchain-core 1.6.12`, `langgraph 1.2.16`.
+- *Refined by D-38 and [ADR-0009](0009-claude-mode-runtime.md):* the prototype uses an explicit loop on
+  `ChatAnthropic.bind_tools`, so only `langchain-anthropic` and `langchain-core` are installed. The `langchain`
+  meta-package and LangGraph are not; LangGraph remains the production story.
 
 ## Depends on (team & context)
 - **Familiarity:** a team that knows LangChain moves faster with it; others pay a learning cost.
@@ -22,8 +25,9 @@ setup recommended the direct Anthropic SDK; the user chose **LangChain**.
 
 ## Consequences
 - More dependencies in the `llm` extra. `uv.lock` pins them. A stub-mode run installs and imports none of them.
-- In `/slice reasoner`, verify how `langchain-anthropic` does structured output and tool choice with the chosen Claude
-  model, and keep the model id and effort level in config.
+- Before building the loop, verify how `langchain-anthropic` handles structured output and tool choice with the chosen
+  Claude model, and keep the model id and effort level in config. (Done in ADR-0009: forced tool choice is rejected, so
+  the loop uses `tool_choice="auto"` with strict tools.)
 - The prompt and the tool schemas stay readable artifacts in the repo, not hidden in framework defaults.
 
 ## Alternatives considered

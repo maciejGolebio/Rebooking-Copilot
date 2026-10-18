@@ -9,8 +9,8 @@ they save effort and make intent clearer.
 Use mainstream libraries where they earn their place:
 - **pydantic v2:** domain and output models, validation, and a JSON Schema for the output.
 - **anthropic SDK:** only in LLM mode, as an optional extra.
-- **LangChain or similar:** allowed. Whether to use it or the direct SDK is decided in `/slice reasoner`, or with the
-  agent shape in `/design-doc`.
+- **LangChain or similar:** allowed. Whether to use it or the direct SDK was left to the architecture decision
+  (decided in D-20, [ADR-0008](0008-langchain-for-the-agent.md)).
 - **Dev only:** pytest and hypothesis.
 
 Constraint from D-00d: *running* must never need network access or a key. LLM libraries are imported lazily, only in LLM

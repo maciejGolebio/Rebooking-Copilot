@@ -11,7 +11,7 @@ import functools
 from decimal import ROUND_HALF_EVEN, Context, Decimal, DivisionByZero, InvalidOperation, Overflow, localcontext
 from typing import Annotated, Self
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict
+from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, WithJsonSchema
 
 # ISO 4217 minor units for the currencies we accept. An unknown code is a data problem, not something to guess.
 MINOR_UNITS: dict[str, int] = {
@@ -72,7 +72,15 @@ def _known_currency(value: object) -> str:
     return value
 
 
-Amount = Annotated[Decimal, BeforeValidator(_exact_decimal)]
+DECIMAL_PATTERN = r"^-?\d+(\.\d+)?$"
+
+# Exact in, exact out: JSON gets fixed-point text (never "5E+1"), and the schema says so.
+Amount = Annotated[
+    Decimal,
+    BeforeValidator(_exact_decimal),
+    PlainSerializer(lambda d: format(d, "f"), return_type=str, when_used="json"),
+    WithJsonSchema({"type": "string", "pattern": DECIMAL_PATTERN, "description": "Exact decimal, fixed-point notation"}, mode="serialization"),
+]
 CurrencyCode = Annotated[str, BeforeValidator(_known_currency)]
 
 

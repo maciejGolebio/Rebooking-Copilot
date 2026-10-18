@@ -1,8 +1,8 @@
 # ADR-0006: Money model: settlement form, FX and fee basis
-- **Status:** Accepted (parts provisional, pending answers from the assessors) · **Date:** 2026-10-18 · **Decided by:** user, plus defaults · **Log:** D-10, D-12, D-13, D-18
+- **Status:** Accepted (parts provisional until the open questions are answered) · **Date:** 2026-10-18 · **Decided by:** user, plus defaults · **Log:** D-10, D-12, D-13, D-18
 
 ## Context
-A cheaper fare is only a saving if the money actually comes back, in a currency we can compare, after the right
+A cheaper fare is only a saving if the money actually comes back, in a currency that can be compared, after the right
 fees. The fixtures don't say how a fare difference is returned. RT5K8B was paid in EUR but is offered in USD. The two
 change fees per booking (the ticket's and the offer's) can flip a result: HB6W9E / OF-5002 is −40 with the ticket's
 fee and +110 with the offer's.
@@ -16,6 +16,8 @@ fee and +110 with the offer's.
   reported separately, and the case goes to NEEDS_REVIEW.
 - **FX** (D-12): an injected `FxProvider`, stubbed with a timestamped static rate table plus a spread margin. The rate,
   its source and its as-of time are recorded in the output. Amounts are compared in the ticket's currency, and code never mixes currencies.
+  *Refined by D-27 and D-35:* the provider is API-shaped (`quote(from, to, as_of)`), and the mock returns one executable
+  rate with the spread already included (USD→EUR 0.9276, `mock-fx-v1`). Every quote is validated before use.
 - **Threshold** (D-13): net ≥ max(25, 5% of total paid), in the ticket's currency, configurable and versioned with the policy.
 - **Clock** (D-18): the as-of time is injected and defaults to the snapshot's `capturedAt`. It's never the wall clock.
 

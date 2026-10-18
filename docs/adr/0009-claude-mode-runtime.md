@@ -1,8 +1,8 @@
 # ADR-0009: Claude-mode runtime: Sonnet 5.5, explicit LangChain loop, validator
-- **Status:** Accepted (refines ADR-0007 and ADR-0008) · **Date:** 2026-10-18 · **Decided by:** user, plus defaults · **Log:** D-36, D-37, D-38, D-39
+- **Status:** Accepted (refines ADR-0007 and ADR-0008) · **Date:** 2026-10-18 · **Decided by:** user, plus defaults · **Log:** D-36, D-37, D-38, D-39, D-40, D-41
 
 ## Context
-ADR-0007 chose an agent over deterministic tools and ADR-0008 chose LangChain. `/slice reasoner` had to settle the
+ADR-0007 chose an agent over deterministic tools and ADR-0008 chose LangChain. Building the reasoner meant settling the
 model, the effort, the switch and the shape of the loop. The current Claude API (checked against the API reference
 on 2026-10-18) shapes the answer:
 - Claude Sonnet 5.5 rejects forced `tool_choice` (`any` or `tool`) and non-default sampling parameters.
@@ -14,21 +14,31 @@ on 2026-10-18) shapes the answer:
   thinking is left on (it is the default). The server-side refusal fallback is on by default
   (`server-side-fallback-2026-07-01`, `fallbacks: "default"`). If the whole chain refuses, the validator falls back to
   the deterministic decision.
-- **Switch** (D-37): `--reasoner claude` or `REBOOKING_REASONER=claude`; the flag wins. Credentials resolve the SDK's
-  normal way. If Claude mode can't run (missing extra or credentials), every routed booking falls back, and the CLI says so.
+- **Switch** (D-37): `--reasoner claude` or `REBOOKING_REASONER=claude`; the flag wins. Credentials: `ANTHROPIC_API_KEY`
+  only. `ChatAnthropic` passes the key explicitly (an empty string when unset), so `ant auth` profiles aren't read (D-41).
+  If Claude mode can't run (missing extra or key), every routed booking falls back, and the CLI says so.
 - **Loop** (D-38): an explicit loop on LangChain primitives: `ChatAnthropic.bind_tools(TOOLS, tool_choice="auto", strict=True)`.
   - Five strict tools: four read-only, id-only lookups, plus `submit_recommendation`, which has no numeric fields.
   - The loop is append-only, so thinking blocks are passed back as returned.
-  - Its budget is 6 turns and 30 s. Missing submission, refusal, API error or invalid output → fallback.
+  - Its budget is 6 turns and 30 s; a call starts only if its 10 s timeout still fits, and SDK retries are off.
+  - A text-only reply gets one reminder. A missing submission, a refusal (its category recorded), `max_tokens`, an
+    API error or invalid output → fallback.
+  - LangChain stores the refusal-fallback block as `from_`; it is resent as `from`, which the API expects. The model
+    that actually served is recorded as the reasoner (D-41).
+  - Prompt caching is requested with top-level `cache_control`.
   - Only `langchain-anthropic` (and `langchain-core`) are needed. The `langchain` meta-package is not.
 - **Validator** (D-39):
   - The agent works on the booking's seat-feasible eligible set after the ledger.
-  - It accepts a submission only if the offer is in that set, REBOOK passes the settlement gate, and every number in
-    the rationale appears in the facts or tool results.
+  - It accepts a submission only if the offer is in that set, REBOOK passes the settlement gate, the offer isn't a
+    `PRICE_ANOMALY` (D-40), and every amount in the rationale matches an (amount, currency) pair from this booking's
+    facts (D-41). The check can't catch a real amount attributed to the wrong thing, so the code's own summary comes first.
   - Confidence: a review-level REBOOK is capped at MEDIUM, and the agent's ceiling can only lower confidence.
   - Declining a clean saving escalates to NEEDS_REVIEW (D-22).
-  - A REBOOK onto another offer moves the seat for later bookings.
-- **Prompt:** `src/rebooking_copilot/prompts/rebooking_agent_v1.md`, versioned. FACTS are delimited and treated as data.
+  - A REBOOK onto another offer moves the seat for later bookings, and a seat it frees is re-offered to bookings the
+    agent didn't decide (D-41).
+  - A declined credit saving stays visible as NEEDS_REVIEW, and every non-REBOOK carries a reason (D-41).
+- **Prompt:** `src/rebooking_copilot/prompts/rebooking_agent_v2.md` (v1 kept), versioned and hashed into the fingerprint.
+  FACTS are delimited, `<` and `>` are escaped, and offer ids follow a strict pattern, so data can't close the block.
 
 ## Depends on (team & context)
 - **Cost and quality trade-off:** Sonnet 5.5 is about half Opus 5.5's price. A team with a measured quality gap on hard
@@ -41,9 +51,10 @@ on 2026-10-18) shapes the answer:
 
 ## Consequences
 - With the fixtures, only ZC3N1D is routed (D-21). Multi-offer and seat cases are covered by scripted fake-agent tests.
-- Every Claude-mode recommendation records the reasoner (`claude:claude-sonnet-5-5`), the prompt version, the tool
-  trace and any fallback reason. Stub-mode determinism is unchanged (D-23).
-- No test calls the network. The real `ChatAnthropic` request payload is verified offline.
+- Every Claude-mode recommendation records the reasoner (`claude:<serving model>`), the prompt version, the tool
+  trace, a per-call log and any fallback reason. Stub-mode determinism is unchanged (D-23).
+- No test calls the network. The real `ChatAnthropic` runs offline against canned API responses
+  (`tests/test_review2_regressions.py`): request shape, thinking replay, refusal, `max_tokens`, the fallback block.
 
 ## Alternatives considered
 - **Claude Opus 5.5:** the API reference's default, with the strongest judgement, at twice the price.

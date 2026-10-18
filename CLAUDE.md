@@ -68,7 +68,8 @@ expect to run them yourself. Guide: `docs/AI_SETUP.md`.
 - **Architecture:** an LLM agent over deterministic tools; code builds the eligible set and re-validates (D-19, ADR-0007).
   The agent runs only for review-level or multi-offer cases (D-21).
 - **LLM mode:** deterministic stub by default; Claude mode with `--reasoner claude` or `REBOOKING_REASONER=claude` (the flag wins, D-37):
-  `claude-sonnet-5-5`, effort `medium`, refusal fallback on (D-36, ADR-0009). The LLM decides only inside the code-built eligible set (D-07).
+  `claude-sonnet-5-5`, effort `medium`, refusal fallback on (D-36, ADR-0009); needs `ANTHROPIC_API_KEY` (no `ant auth` profiles, D-41).
+  The LLM decides only inside the code-built eligible set (D-07) and never approves a `PRICE_ANOMALY` (D-40).
 - **Dependencies:** pydantic at runtime · `langchain-anthropic` (+ `anthropic`) in the optional extra `llm`, lazily imported
   (D-20, D-38) · dev: pytest, hypothesis, langchain-anthropic for the scripted-agent tests (D-04, ADR-0003)
 - **Method:** test-first: a golden case per fixture PNR plus invariant/property tests (D-03)
