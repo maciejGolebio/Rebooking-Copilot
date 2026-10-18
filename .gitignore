@@ -1,0 +1,25 @@
+# Secrets (keys come from env vars only)
+.env
+.env.*
+!.env.example
+
+# Claude Code personal / runtime state
+.claude/settings.local.json
+.claude/state/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# OS
+.DS_Store
