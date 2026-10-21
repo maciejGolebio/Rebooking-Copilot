@@ -1,6 +1,7 @@
-"""recommendations.json (D-05): one file per run, validated against its JSON Schema before it is written.
+"""recommendations.json (D-05): one file per run, validated before it is written by re-parsing it with its pydantic models.
 
-The schema is generated from the pydantic models and committed at schemas/recommendations.schema.json.
+The schema is generated from the pydantic models and committed at schemas/recommendations.schema.json; a test keeps
+the two identical.
 Regenerate it with:  uv run python -m rebooking_copilot.output
 """
 

@@ -19,7 +19,7 @@ from factories import booking, fixture_inputs, load, offer, usd
 from rebooking_copilot.agent import DEFAULT_EFFORT, DEFAULT_MODEL, ClaudeReasoner
 from rebooking_copilot.decision import Action, Confidence, evaluate
 from rebooking_copilot.policy import PolicyConfig, Reason, SettlementPolicy
-from rebooking_copilot.reasoning import PROMPT_VERSION, AgentRun, UnavailableReasoner, allowed_for_case, allowed_for_recommendation, check_rationale, numbers_in
+from rebooking_copilot.reasoning import PROMPT_VERSION, AgentRun, UnavailableReasoner, allowed_for_case, allowed_for_recommendation, build_facts, check_rationale, numbers_in
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -323,6 +323,34 @@ def test_a_real_amount_misattributed_still_passes():
     # Documented limitation (DESIGN §3): the check can't tell which real amount a sentence is about. 640.00 USD is the
     # fare paid, not the saving. That's why every structured field is code-built and the code's summary comes first.
     assert check_rationale("Saves 640.00 USD net.", allowed_for_case(_zc_case())) is None
+
+
+def _fx_case():
+    # 2105.55 USD × 0.9276 = 1953.108180 EUR, so FACTS shows cent-rounded amounts that differ from the exact ones.
+    reasoner = RecordingReasoner()
+    evaluate(*load([booking("RT5K8B")], [offer("OF-3001", price="2105.55"), offer("OF-3001", offer_id="OF-3002", price="2110.15")]), reasoner=reasoner)
+    return reasoner.case
+
+
+def test_amounts_copied_from_facts_pass_when_facts_rounds_them():
+    case = _fx_case()
+    for o in build_facts(case)["eligible_offers"]:
+        text = f"{o['offer_id']} at {o['price_per_passenger']} saves {o['counted_net_saving']} net, above the {o['threshold']} threshold."
+        assert check_rationale(text, allowed_for_case(case)) is None, text
+    assert check_rationale("Saves 246.891820 EUR net.", allowed_for_case(case)) is None  # as compute_saving returns it
+
+
+@pytest.mark.parametrize("text", ["Saves 246.90 EUR net.", "Saves 246.88 EUR net.", "Saves 246.9 EUR net.", "Saves 246.89 USD net.", "Saves 1953.11 EUR net."])
+def test_amounts_near_a_rounded_fact_are_still_rejected(text):
+    assert check_rationale(text, allowed_for_case(_fx_case())) is not None
+
+
+@pytest.mark.parametrize("offer_id", ["999.00USD", "USD999.00"])
+def test_a_money_like_offer_id_does_not_become_an_allowed_amount(offer_id):
+    # Allowing amounts by scanning the rendered FACTS text let a supplier offer id smuggle "999.00 USD" into the allow-list.
+    reasoner = RecordingReasoner()
+    evaluate(*load([booking("ZC3N1D")], [offer("OF-4001", offer_id=offer_id)]), reasoner=reasoner)
+    assert check_rationale("Saves 999.00 USD net.", allowed_for_case(reasoner.case)) is not None
 
 
 # --- stub mode never imports LangChain (D-00d, ADR-0003) -----------------------------------------------------------

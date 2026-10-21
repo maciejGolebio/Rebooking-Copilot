@@ -21,7 +21,7 @@ For every PNR, `pricePerPassenger × passengers == totalPaid`.
 ## 2. Traps
 1. **Wrong fee basis** (HB6W9E/OF-5002). Using the *offer's* fee (0.00) instead of the ticket's (150.00) turns −40.00 into +110.00.
 2. **Passenger multiplier** (LM9P4C). Forgetting × 2 on the fee gives −15.00 instead of −90.00. The decision doesn't flip, but the explanation would be wrong.
-3. **Currency mismatch** (RT5K8B). At any rate above 0.9545 USD/EUR, a naive conversion makes the USD offer look cheaper. The two zero fees are in different currencies and must not be added together.
+3. **Currency mismatch** (RT5K8B). At any rate above 0.9545 USD per 1 EUR (below 1.0476 EUR per 1 USD), a naive conversion makes the USD offer look cheaper. The two zero fees are in different currencies and must not be added together.
 4. **Lost refundability shows up as the biggest saving** (ZC3N1D). +140.00, paid for by giving up a fully refundable fare.
 5. **Downgrade on another flight** (LM9P4C/OF-2001). BASIC_ECONOMY, 0 bags, 20 minutes earlier.
 6. **The decoy cheapest fare** (HB6W9E/OF-5002). Another carrier, an extra stop, a red-eye arriving the next day, no bag, 1 seat left.
@@ -50,7 +50,7 @@ This is a projection for checking that the policy is coherent. The golden tests 
 |---|---|---|---|---|
 | QX7T2A | OF-1001 clean; net 80 ≥ 25 | NEEDS_REVIEW: under `cash_only`, the residual of a non-refundable ticket counts as credit | the same, because the settlement gate is in code | D-10, D-13 |
 | LM9P4C | OF-2001 ineligible (bags 1→0), and net −90 | DO_NOT_REBOOK, with every reason code | the same | D-11, D-13 |
-| RT5K8B | OF-3001 clean apart from FX; needs ≥ 110 EUR, i.e. a stub rate ≥ 1.0048 USD/EUR after spread | REBOOK if the stub rate clears it; confidence lowered for FX use | the same | D-12, D-13, D-17 |
+| RT5K8B | OF-3001 clean apart from FX; needs ≥ 110 EUR, i.e. an executable (spread-included) rate of at most 0.9952 EUR per 1 USD (≥ 1.0048 USD per 1 EUR); the mock's 0.9276 EUR per 1 USD (≈ 1.078 USD per 1 EUR) clears it | REBOOK if the stub rate clears it; confidence lowered for FX use | the same | D-12, D-13, D-17 |
 | ZC3N1D | OF-4001 review-level (lost refundability); net 140 ≥ 32 | NEEDS_REVIEW | may recommend REBOOK at MEDIUM at most, with the trade-off listed | D-11, D-16, D-18 |
 | HB6W9E | OF-5001 below threshold (−90); OF-5002 ineligible (bags, +875 min, next-day arrival) | DO_NOT_REBOOK | the same | D-11, D-13, D-14 |
 

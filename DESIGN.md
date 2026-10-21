@@ -15,7 +15,7 @@
 >   - abstain (NEEDS_REVIEW) on invalid data, a missing or stale FX rate, or a trade-off a human should weigh.
 > - **It recommends, it never executes** (D-09). Stub mode is deterministic and runs offline with no key, which is how the
 >   example output was produced. Claude mode is opt-in.
-> - **Built:** the risky core, the agent with its validator, JSON output, and 320 tests. **Described:** production
+> - **Built:** the risky core, the agent with its validator, JSON output, and 329 tests. **Described:** production
 >   reshopping at scale and the approve → execute flow.
 
 ## 1. Problem framing
@@ -68,7 +68,7 @@ flowchart TD
 | `policy.py` | The deterministic core tools: matching, the money breakdown, tiers and the rule trace (ADR-0005/0006) |
 | `decision.py` | Seat ledger, deterministic choice, confidence, fingerprint; routes cases to the agent and validates its answers |
 | `reasoning.py`, `agent.py`, `prompts/` | What the agent sees, its tools, the explicit LangChain loop, the faithfulness check (ADR-0009) |
-| `output.py`, `schemas/` | `recommendations.json`, validated against the committed JSON Schema (D-05) |
+| `output.py`, `schemas/` | `recommendations.json`, re-parsed with the pydantic models before writing; a test keeps the committed JSON Schema identical to them (D-05) |
 
 **Considered alternatives** (D-19):
 - **A safety-first pipeline with one structured LLM call (option A).** It is the cheapest boundary, at roughly 2.5× fewer tokens
@@ -114,10 +114,13 @@ flowchart TD
   declines stays visible as NEEDS_REVIEW with `SAVING_AS_CREDIT`, and every non-REBOOK carries a reason (D-41). Anything
   else is a full fallback, with the reason in `fallbackReason`.
 - **The number check** (D-41): every amount in the agent's rationale must match an (amount, currency) pair from this
-  booking's facts exactly. Ids, flight numbers, dates and the FX source are stripped first; percentages and number words
-  are rejected. Tool error messages never echo the agent's arguments, so it can't launder a number through an error,
+  booking's facts exactly, as the agent was shown it: the exact value from a tool, or the cent-rounded value in FACTS
+  (an FX-converted saving such as 246.891820 EUR appears in FACTS as 246.89 EUR). Ids, flight numbers, dates and the
+  FX source are stripped first; percentages and number words are rejected. Tool error messages never echo the agent's
+  arguments, so it can't launder a number through an error,
   and offer ids must match a strict pattern, so supplier data can't close the FACTS block. **Limit:** the check can't
-  tell whether a real amount is attributed to the right thing (calling the fee the saving passes). The output therefore
+  tell whether a real amount is attributed to the right thing (calling the fee the saving passes), and a number written
+  without a currency passes if it equals any allowed amount. The output therefore
   puts the code's own summary first and the agent's text after it as "Agent's view: …", and a test documents the limit.
 - **Confidence** comes from code signals: FX use, margin over the threshold, snapshot age and the tier (D-28). It is
   never the model's self-report.
@@ -133,6 +136,9 @@ flowchart TD
   reported but can never become REBOOK.
 - **FX** (D-12, D-27): through the `FxProvider` seam. The quote must match the requested pair and be fresh. Amounts in
   different currencies are never added or compared, so a missing rate means NEEDS_REVIEW.
+  The only REBOOK (RT5K8B) rests on the illustrative `mock-fx-v1` rate. That is acceptable because nothing executes:
+  a human approves it, execution re-prices with a live executable quote ("Before any real action" below), and its
+  confidence is already one band lower for FX use (D-12, D-27, D-28, D-42).
 
 **Policy v1** (ADR-0005), versioned and configurable:
 
@@ -159,7 +165,7 @@ flowchart TD
 - **Errors are contained.** An error in one booking yields NEEDS_REVIEW for that booking only, and a provider failure is
   an abstain, never a crash.
 
-**Tests: 320, with no network access.**
+**Tests: 329, with no network access.**
 - **Golden cases:** one per fixture booking.
 - **Property tests (hypothesis):** recomputable savings; no REBOOK on a hard block; monotonicity per booking (with two
   documented exceptions, D-34 and D-35); stub-mode determinism; one result per input.
@@ -192,9 +198,9 @@ flowchart TD
 
 What breaks first is **supplier limits** (look-to-book ratios) and **human review capacity**, not compute.
 
-**Cost model.** Sizes are measured from the real prompt, tool schemas, FACTS and tool results; tokens ≈ characters / 4.
-A typical agent run with prompt v2 has three turns (check_policy → compute_saving → submit), with about 7.1k input and
-1k output tokens.
+**Cost model.** Token sizes are **estimates**, not measurements from a live run: the character counts of the real
+prompt, tool schemas, FACTS and tool results, at tokens ≈ characters / 4. A typical agent run with prompt v2 has three
+turns (check_policy → compute_saving → submit), estimated at about 7.1k input and 1k output tokens.
 
 On Sonnet 5.5 ($2 / $10 per MTok) that is **≈ $0.024 per routed booking, or 0.10% of the smallest saving worth
 surfacing.** The worst case, 6 turns with no submission, is ≈ $0.058.
@@ -258,13 +264,15 @@ The metrics, and how to tell the system isn't working:
 | 7 | Lead time and timezones | 24 h, assuming the earliest timezone | Too strict close to departure | yes | D-33 |
 | 8 | Anomalous prices | More than 60% off → review, never an agent approval | Misses or over-flags feed errors | yes | D-34, D-40 |
 | 9 | `amount` includes taxes | It's the comparable full amount | Savings overstated | no | framing §6 |
+| 10 | The absolute floor in other currencies | A bare 25 in the ticket's currency (the fixtures hit it only in USD) | 25 JPY or 25 KWD is a very different bar; a per-currency floor needs business input, so this is a stated v1 limit | yes | D-13, D-42 |
+| 11 | A non-refundable ticket moved to another carrier | Review-level, like any carrier change, by decision (framing trap 6 is not encoded as a block) | Under a credit-counting policy (not the `cash_only` default), an agent could approve at MEDIUM an exchange the airline won't allow | yes | D-11, D-42 |
 
 ## 8. What I deliberately did not do, and what's next
 | Area | Status | Note |
 |---|---|---|
 | Money, typed models, validating loader | **Built** | 41 tests |
 | Matching, tiers, breakdown, FX seam, seat ledger, confidence, fingerprint | **Built** | 186 spec-derived tests |
-| Agent, validator, prompt, rationales, JSON output and schema | **Built** | 50 tests with a scripted fake model |
+| Agent, validator, prompt, rationales, JSON output and schema | **Built** | 59 tests with a scripted fake model |
 | Review findings (two rounds) | **Fixed** | 22 + 21 regression tests, including the production client run offline against canned API responses |
 | A live Claude run | **Not done** | It costs money and needs approval; it's ready behind `--reasoner claude`. The request and response handling are tested offline; a live run would add the model's actual judgement, latency and cache behaviour |
 | Real FX source; plausibility check against a reference rate | **Not done** | A plausible-looking misquote still passes; production would cross-check two sources |
@@ -275,12 +283,14 @@ The metrics, and how to tell the system isn't working:
 1. Put the drafted questions to the assessors (settlement, fee basis, point of sale) and flip the provisional decisions.
 2. Build an eval set for review-level cases from human decisions, then tune the prompt and effort on it.
 3. Add a real FX source with a reference-rate check.
-4. Rank the review queue and run shadow mode for the auto tier.
+4. Rank the review queue and run shadow mode for the auto tier. Before ranking by saving, add the settlement form next
+   to `estimatedNetSaving` in the JSON, so a credit residual can't be ranked as cash (D-30, D-42).
 5. Add multi-segment itineraries.
 
 ## 9. AI usage note
 **Tools.** Claude Code in the desktop app with Claude Opus 5.5. Subagents (Sonnet or Opus) did fixture analysis,
-architecture options, test-first test writing and independent reviews.
+architecture options, test-first test writing and independent reviews. In the third review round, one of the two
+assessor reviews was done with Grok.
 
 **How I drove it.**
 - **Phases.** I ran it phase by phase: kickoff → framing → design options → three test-first build slices → the full

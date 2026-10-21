@@ -6,12 +6,11 @@ ADR-0003 deferred the choice between the direct SDK and LangChain. ADR-0007 need
 AI setup recommended the direct Anthropic SDK; I chose **LangChain**.
 
 ## Decision
-- Use `langchain` and `langchain-anthropic` (ChatAnthropic, a tool-calling agent) as the optional extra `llm`.
+- Use LangChain (`langchain-anthropic`'s ChatAnthropic, a tool-calling agent) as the optional extra `llm`.
 - Import them **lazily, only in Claude mode**. The stub path never imports them (ADR-0003, D-00d).
 - In tests, LangChain's fake chat models script adversarial agent behaviour. No network, no key.
 - In production, the approve → re-price → re-validate → execute flow is described on **LangGraph**, using `interrupt()` for
-  human approval and checkpointed state. LangGraph already arrives as a dependency of `langchain`.
-- Resolved on Python 3.14 (2026-10-18): `langchain 1.4.6`, `langchain-anthropic 1.7.6`, `langchain-core 1.6.12`, `langgraph 1.2.16`.
+  human approval and checkpointed state.
 - *Refined by D-38 and [ADR-0009](0009-claude-mode-runtime.md):* the prototype uses an explicit loop on
   `ChatAnthropic.bind_tools`, so only `langchain-anthropic` and `langchain-core` are installed. The `langchain`
   meta-package and LangGraph are not; LangGraph remains the production story.

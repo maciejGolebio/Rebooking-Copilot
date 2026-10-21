@@ -15,7 +15,7 @@ so there's no need to reply if the defaults are fine. A one-line answer is plent
    or is it forfeited, and should credit count as a saving?
    *Default: refundable → cash, non-refundable → credit; only cash counts, and credit goes to human review.*
 2. Whose saving is it, the traveler's or the paying client's? And roughly what does one agent review plus exchange cost?
-   *Default: the payer's; a minimum net saving of max(25, 5% of the fare).*
+   *Default: the payer's; a minimum net saving of max(25, 5% of the total paid for the booking), in the ticket's currency.*
 3. Is the applicable fee the existing ticket's change fee, per passenger?
    *Default: yes; the new fare's fee only matters for a later change.*
 

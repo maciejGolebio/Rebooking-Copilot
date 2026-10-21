@@ -13,6 +13,7 @@ from pathlib import Path
 from rebooking_copilot.decision import Recommendation, evaluate
 from rebooking_copilot.loader import LoaderError, load_fare_snapshot, load_pnrs
 from rebooking_copilot.output import build_file, write_file
+from rebooking_copilot.policy import Settlement
 from rebooking_copilot.reasoning import UnavailableReasoner
 
 REASONERS = ("stub", "claude")
@@ -71,13 +72,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def print_table(recommendations: tuple[Recommendation, ...]) -> None:
-    header = f"{'PNR':<8} {'ACTION':<14} {'OFFER':<8} {'NET SAVING':>14}  {'CONFIDENCE':<10}  {'DECIDED BY':<24}  REASONS"
+    header = f"{'PNR':<8} {'ACTION':<14} {'OFFER':<8} {'NET SAVING':>18}  {'CONFIDENCE':<10}  {'DECIDED BY':<24}  REASONS"
     print(header)
     print("-" * len(header))
     for r in recommendations:
         saving = str(r.estimated_net_saving) if r.estimated_net_saving is not None else "-"
+        if r.breakdown is not None and r.breakdown.settlement is Settlement.CREDIT:
+            saving += " (credit)"
         decided = r.reasoner + (" (fallback)" if r.fallback_reason else "")
-        print(f"{r.pnr or '?':<8} {r.action:<14} {r.chosen_offer_id or '-':<8} {saving:>14}  {r.confidence:<10}  {decided:<24}  {', '.join(r.reasons) or '-'}")
+        print(f"{r.pnr or '?':<8} {r.action:<14} {r.chosen_offer_id or '-':<8} {saving:>18}  {r.confidence:<10}  {decided:<24}  {', '.join(r.reasons) or '-'}")
 
 
 def print_rationales(recommendations: tuple[Recommendation, ...]) -> None:

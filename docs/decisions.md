@@ -36,7 +36,7 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-17 | Confidence | LOW/MEDIUM/HIGH bands from code signals; HIGH = future auto-tier eligible; the LLM can only lower it | user | accepted |
 | D-18 | Framing defaults | Fee = existing ticket's change fee × pax; as-of clock injected, default `capturedAt`; stub returns NEEDS_REVIEW for review-level differences; extra test cases under `tests/` | default | accepted (fee basis provisional: client Q3) |
 | D-19 | Architecture | B: an LLM agent over deterministic tools; code builds the eligible set independently and re-validates ([ADR-0007](adr/0007-agent-over-deterministic-tools.md)); considered alternatives in DESIGN.md: A, the Hybrid, C as production design | user | accepted |
-| D-20 | LLM library | LangChain (`langchain`, `langchain-anthropic`) as the `llm` extra, lazily imported; LangGraph described for production HITL ([ADR-0008](adr/0008-langchain-for-the-agent.md)) | user | accepted |
+| D-20 | LLM library | LangChain as the `llm` extra, lazily imported (only `langchain-anthropic` + `langchain-core` installed, refined by D-38); LangGraph described for production HITL, not installed ([ADR-0008](adr/0008-langchain-for-the-agent.md)) | user | accepted |
 | D-21 | Agent routing | Claude mode: the agent runs only for review-level or ≥2 eligible offers; an empty set or a single clean offer is decided deterministically | user | accepted |
 | D-22 | Agent veto | The agent declining a clean offer above the threshold → NEEDS_REVIEW `LLM_DISAGREES_WITH_POLICY` | user | accepted |
 | D-23 | Reproducibility | Determinism is claimed for stub mode only; Claude mode records model, prompt version, tool trace and answer | user | accepted |
@@ -58,6 +58,7 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 | D-39 | Validator details | Agent works on the post-ledger seat-feasible set; any failed check → full deterministic fallback; veto shows the best clean offer; agent REBOOK moves the seat | default | accepted; refined by D-40, D-41 |
 | D-40 | Agent and PRICE_ANOMALY | The agent can never REBOOK an offer flagged PRICE_ANOMALY; such a submission falls back to the deterministic NEEDS_REVIEW | user | accepted |
 | D-41 | Review hardening (round 2) | Typed rationale number check; strict offer-id pattern and escaped FACTS; agent outcomes keep credit savings visible and always carry a reason; an unpriced sibling offer lowers confidence; seats freed by the agent are re-offered; LangChain runtime fixes; fixed-point JSON amounts; prompt v2 | default | accepted |
+| D-42 | Review round 3 outcomes | Keep RT5K8B's MEDIUM REBOOK on the mock rate (reaffirms D-12); JSON unchanged for credit, settlement field listed as next (reaffirms D-30); currency-blind 25 floor stated as a limit pending business input (D-13); non-refundable + carrier change stays review-level (reaffirms D-11) | user | accepted |
 
 ## Entries
 
@@ -209,8 +210,9 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
 
 ### D-20: LLM library (2026-10-18)
 - **Options:** the direct SDK (recommended) · LangChain · LangGraph in the prototype
-- **Decision:** LangChain, lazily imported in Claude mode only. LangGraph, already a transitive dependency, is described
-  for the production approval flow. It resolves on Python 3.14.
+- **Decision:** LangChain, lazily imported in Claude mode only. LangGraph is described for the production approval
+  flow. It resolves on Python 3.14. *Refined by D-38:* only `langchain-anthropic` and `langchain-core` are installed;
+  the `langchain` meta-package and LangGraph are not.
 - **Decided by:** user · **Status:** accepted · [ADR-0008](adr/0008-langchain-for-the-agent.md)
 
 ### D-21: Agent routing (2026-10-18)
@@ -430,6 +432,22 @@ Architecture-significant decisions also get a full ADR in [`docs/adr/`](adr/READ
      what `chosen_offer_id` means for each decision, a strict number rule, and submit exactly once.
 - **Decided by:** default (fix choices confirmed by the user) · **Status:** accepted
 - **Consequences / where it shows:** DESIGN.md §3, §4, §5, §8; ADR-0009; `reasoning.py`, `agent.py`, `decision.py`, `rationale.py`.
+
+### D-42: Review round 3 outcomes (2026-10-20), reaffirms D-11, D-12, D-13, D-30
+- **Context:** two independent assessor reviews questioned four recorded choices: RT5K8B's only REBOOK rests on the
+  illustrative `mock-fx-v1` rate; QX7T2A's 80.00 USD credit is the headline `estimatedNetSaving`; the 25 floor is
+  currency-blind; a non-refundable ticket can move to another carrier at review level.
+- **Options:**
+  - RT5K8B: A) keep REBOOK (MEDIUM) and defend it in DESIGN §4 · B) mark mock quotes non-executable, capping at NEEDS_REVIEW
+  - Credit in the JSON: A) unchanged; the table labels it `(credit)`, and a settlement field is a next step · B) add the field now · C) count credit as 0 under `cash_only`
+  - Floor: A) a stated limit pending business input · B) a per-currency floor table · C) 25 USD converted through `FxProvider`
+  - Carrier change on a non-refundable ticket: A) stays review-level · B) a hard block
+- **Decision:** A for all four.
+- **Decided by:** user · **Status:** accepted
+- **Why:** nothing executes, a human approves every rebook and execution re-prices with a live quote, so an indicative
+  rate is acceptable for a recommendation. The schema change, the floor values and a new hard block each need business
+  input, not a guess.
+- **Consequences / where it shows:** DESIGN.md §4 (FX), §7 rows 10–11, §8 Next 4; `docs/open-questions.md` #9; behaviour unchanged.
 
 <!--
 Entry format:

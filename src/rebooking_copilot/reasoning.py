@@ -228,6 +228,14 @@ def _breakdown_money(bd) -> list[Money]:
             bd.gross_saving, bd.change_fees, bd.net_saving, bd.counted_net_saving, bd.threshold]
 
 
+def _money_in(text: str) -> set[tuple[Decimal, str]]:
+    pairs = set()
+    for match in _MONEY.finditer(text):
+        amount, currency = match.group("a") or match.group("b"), match.group("c1") or match.group("c2")
+        pairs.add((Decimal(amount.replace(",", "")), currency))
+    return pairs
+
+
 def _time_tokens(dt) -> list[str]:
     iso = dt.isoformat()
     return [iso, iso[:10], iso[11:16], iso[11:19]]
@@ -246,7 +254,14 @@ def allowed_for_case(case: AgentCase) -> AllowedNumbers:
         if a.breakdown.fx is not None:
             plain.add(a.breakdown.fx.rate)
             tokens.append(a.breakdown.fx.source)
-    return AllowedNumbers(money=frozenset((m.amount, m.currency) for m in money), plain=frozenset(plain), tokens=tuple(tokens))
+    # FACTS shows these amounts rounded to minor units (str(Money), see build_facts); the tools return them exact. Both
+    # are what the model was shown. The rounded values come from the amounts themselves, not from scanning the rendered
+    # text, so a money-like offer id ("999.00USD") can't add an amount.
+    in_facts = [ticket.price_per_passenger, ticket.total_paid, ticket.change_fee_per_passenger]
+    for o, a in zip(case.offers, case.assessments, strict=True):
+        in_facts += [o.price, a.breakdown.counted_net_saving, a.breakdown.threshold]
+    pairs = {(m.amount, m.currency) for m in money} | {(m.quantized().amount, m.currency) for m in in_facts}
+    return AllowedNumbers(money=frozenset(pairs), plain=frozenset(plain), tokens=tuple(tokens))
 
 
 def allowed_for_recommendation(rec) -> AllowedNumbers:
@@ -261,9 +276,7 @@ def allowed_for_recommendation(rec) -> AllowedNumbers:
                 tokens.append(a.breakdown.fx.source)
     pairs = {(m.amount, m.currency) for m in money}
     for issue in rec.data_issues:
-        for match in _MONEY.finditer(issue.detail):
-            amount, currency = match.group("a") or match.group("b"), match.group("c1") or match.group("c2")
-            pairs.add((Decimal(amount.replace(",", "")), currency))
+        pairs |= _money_in(issue.detail)
         plain |= numbers_in(issue.detail)
     if rec.error:
         plain |= numbers_in(rec.error)

@@ -13,3 +13,4 @@ Ranked. Each one has our default, so work continues without an answer. The ones 
 | 6 ✉ | Roughly how many active bookings, and how often should they be re-shopped? | The scale and cost section | Scenarios of 10k / 1M / 50M bookings | DESIGN.md §5 |
 | 7 | Should v1 ever execute automatically? | Confidence semantics and safety machinery | Recommend-only; a future auto tier for HIGH, clean cases after shadow mode | D-09, D-17 |
 | 8 | Is the fare amount the full ticket price, including taxes? | Savings are overstated if taxes differ | Treat `amount` as the full comparable amount | framing §6 |
+| 9 | What minimum net saving applies per currency (e.g. JPY, KWD)? | A bare 25 is a very different bar in each currency | 25 in the ticket's currency, a stated limit (the fixtures use it only in USD) | D-13, D-42 |

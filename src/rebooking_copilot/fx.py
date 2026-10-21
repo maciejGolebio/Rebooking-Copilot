@@ -2,8 +2,9 @@
 
 `FxProvider` is the seam for a real FX/treasury API. `MockFxProvider` stands in for it: it returns *executable*
 rates (spread already included, as an API quote would), labelled with their source and as-of time. A missing pair
-raises `FxUnavailableError`; callers abstain rather than guess (D-00b). No inverse is derived from a quoted pair,
-because an executable rate carries its spread in one direction. A quote that doesn't match the request, is stale, or
+raises `FxUnavailableError`; callers abstain rather than guess (D-00b). No amount is ever converted with an inverse
+of a quoted pair, because an executable rate carries its spread in one direction; the seat ledger uses the inverse
+for ranking only (D-31). A quote that doesn't match the request, is stale, or
 comes with a provider error is treated the same way (`FxQuoteInvalidError`, D-35).
 """
 

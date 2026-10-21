@@ -50,6 +50,14 @@ def test_cli_writes_the_file_and_prints_rationales(tmp_path, capsys):
     assert "travel credit" in out  # QX7T2A's rationale is printed
 
 
+def test_table_labels_a_saving_that_would_come_back_as_credit(tmp_path, capsys):
+    assert cli.main(_args(tmp_path)) == 0
+    rows = {line[:6]: line for line in capsys.readouterr().out.splitlines()}
+    assert "80.00 USD (credit)" in rows["QX7T2A"]
+    assert "252.04 EUR" in rows["RT5K8B"] and "(credit)" not in rows["RT5K8B"]
+    assert "140.00 USD" in rows["ZC3N1D"] and "(credit)" not in rows["ZC3N1D"]
+
+
 @pytest.mark.parametrize(
     "env, flag, expected",
     [(None, None, "stub"), ("claude", None, "claude"), ("claude", "stub", "stub"), (None, "claude", "claude"), ("stub", "claude", "claude")],

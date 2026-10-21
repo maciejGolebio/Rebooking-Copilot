@@ -22,7 +22,8 @@ uv sync
 uv run rebooking-copilot
 ```
 
-This prints a table and a one-line rationale per booking, and writes `out/recommendations.json`.
+Run it from the repository root: the default paths are relative. This prints a table and a one-line rationale per
+booking, and writes `out/recommendations.json`.
 Options: `--pnrs PATH`, `--fares PATH`, `--out PATH`, `--reasoner stub|claude`.
 
 `uv sync` also installs the dev tools: pytest, hypothesis, and langchain-anthropic for the offline agent tests.
@@ -45,7 +46,7 @@ Without a key, the run still completes. The CLI says so up front, and the routed
 
 ```text
 Claude mode unavailable (ANTHROPIC_API_KEY is not set (LangChain's ChatAnthropic doesn't read `ant auth` profiles)); falling back to the deterministic stub for every booking.
-ZC3N1D   NEEDS_REVIEW   OF-4001      140.00 USD  LOW         stub (fallback)           REFUNDABILITY_LOST
+ZC3N1D   NEEDS_REVIEW   OF-4001          140.00 USD  LOW         stub (fallback)           REFUNDABILITY_LOST
     fallback: claude unavailable: ANTHROPIC_API_KEY is not set (LangChain's ChatAnthropic doesn't read `ant auth` profiles)
 ```
 
@@ -58,14 +59,17 @@ No test touches the network. The agent loop is tested with a scripted fake chat 
 the refusal-fallback block).
 
 ## Output
-`out/recommendations.json` uses camelCase keys and is validated against
-[`schemas/recommendations.schema.json`](schemas/recommendations.schema.json) before it is written. Each recommendation has:
+`out/recommendations.json` uses camelCase keys. Before it is written, the exact bytes are re-parsed with the pydantic
+models that [`schemas/recommendations.schema.json`](schemas/recommendations.schema.json) is generated from; a test fails
+if the committed schema drifts from them. Each recommendation has:
 - the decision: `action` (`REBOOK` · `DO_NOT_REBOOK` · `NEEDS_REVIEW`), `chosenOfferId`, `estimatedNetSaving`, the full
   money `breakdown`, `confidence` (`LOW` · `MEDIUM` · `HIGH`), `reasons` (machine-readable codes), `rationale`, and `alternatives`;
 - for audit: every candidate offer's tier and rule trace, `reasoner`, `promptVersion`, `fallbackReason`, `agentTrace`, `agentCalls`,
   `asOf` / `expiresAt` and a `fingerprint`.
 
 Amounts are exact decimal strings, as computed (`1947.960000`); the table and the rationales round them for display.
+In the table, `(credit)` marks a saving that would come back as travel credit rather than cash (`breakdown.settlement`
+in the JSON); under the default `cash_only` policy it can't become a REBOOK (D-30).
 
 ## Example output
 A real run of `uv run rebooking-copilot` from a fresh shell with no API key (stub mode), unedited:
@@ -73,13 +77,13 @@ A real run of `uv run rebooking-copilot` from a fresh shell with no API key (stu
 ```text
 Loaded 5 bookings (0 rejected) and 6 offers (0 rejected); snapshot 2026-07-08T09:00:00+00:00.
 
-PNR      ACTION         OFFER        NET SAVING  CONFIDENCE  DECIDED BY                REASONS
-----------------------------------------------------------------------------------------------
-QX7T2A   NEEDS_REVIEW   OF-1001       80.00 USD  LOW         stub                      SAVING_AS_CREDIT
-LM9P4C   DO_NOT_REBOOK  -                     -  HIGH        stub                      FEWER_BAGS, NET_SAVING_BELOW_THRESHOLD, CABIN_DOWNGRADE, DIFFERENT_FLIGHT
-RT5K8B   REBOOK         OF-3001      252.04 EUR  MEDIUM      stub                      FX_CONVERTED
-ZC3N1D   NEEDS_REVIEW   OF-4001      140.00 USD  LOW         stub                      REFUNDABILITY_LOST
-HB6W9E   DO_NOT_REBOOK  -                     -  HIGH        stub                      NET_SAVING_BELOW_THRESHOLD, FEWER_BAGS, SCHEDULE_OUTSIDE_WINDOW, ARRIVES_LATER_DAY, CABIN_DOWNGRADE, CARRIER_CHANGE, ADDED_STOP
+PNR      ACTION         OFFER            NET SAVING  CONFIDENCE  DECIDED BY                REASONS
+--------------------------------------------------------------------------------------------------
+QX7T2A   NEEDS_REVIEW   OF-1001  80.00 USD (credit)  LOW         stub                      SAVING_AS_CREDIT
+LM9P4C   DO_NOT_REBOOK  -                         -  HIGH        stub                      FEWER_BAGS, NET_SAVING_BELOW_THRESHOLD, CABIN_DOWNGRADE, DIFFERENT_FLIGHT
+RT5K8B   REBOOK         OF-3001          252.04 EUR  MEDIUM      stub                      FX_CONVERTED
+ZC3N1D   NEEDS_REVIEW   OF-4001          140.00 USD  LOW         stub                      REFUNDABILITY_LOST
+HB6W9E   DO_NOT_REBOOK  -                         -  HIGH        stub                      NET_SAVING_BELOW_THRESHOLD, FEWER_BAGS, SCHEDULE_OUTSIDE_WINDOW, ARRIVES_LATER_DAY, CABIN_DOWNGRADE, CARRIER_CHANGE, ADDED_STOP
 
 Why:
   QX7T2A: OF-1001 is the same flight and product, 180.00 USD cheaper in total; after 100.00 USD in change fees the net saving is 80.00 USD. The ticket is non-refundable, so the difference would come back as travel credit, which the cash-only policy doesn't count as a saving. A human should decide.

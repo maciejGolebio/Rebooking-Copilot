@@ -12,14 +12,16 @@ Code sorts every candidate offer into one of three tiers:
 
 | Tier | What puts an offer there | Possible outcome |
 |---|---|---|
-| **Ineligible** (hard block) | fewer included bags (D-11) · another flight departing more than ±60 min away, or arriving on a later day (D-14) · net saving below the threshold (D-13) · seats < passengers | never REBOOK |
+| **Ineligible** (hard block) | fewer included bags (D-11) · another flight departing more than ±60 min away, or arriving on a later day (D-14) · net saving below the threshold (D-13) · seats < passengers · *added later:* departs less than 24 h after as_of (D-33) · no usable FX rate (D-27) · seats taken by higher-priority bookings (D-31) | never REBOOK |
 | **Review-level** | cabin/product downgrade · lost refundability · carrier change · added stop · another flight within ±60 min (D-11, D-14) | **Claude mode:** the LLM may recommend REBOOK, with confidence capped at MEDIUM and the trade-offs listed (D-16). **Stub mode:** NEEDS_REVIEW (D-18, from D-00c) |
 | **Review-level, never an LLM approval** | more than 60% cheaper than paid, a possible feed error (`PRICE_ANOMALY`; added by D-34, *refined by D-40*) | NEEDS_REVIEW in both modes: an agent REBOOK onto it falls back |
 | **Clean** | the same flight and product with none of the above | REBOOK possible; only this tier can reach HIGH confidence |
 
 Confidence is a LOW / MEDIUM / HIGH band computed from code signals: data completeness, margin above the threshold,
 snapshot age, FX use, and the number of review-level differences. HIGH means "eligible for a future auto-execute tier".
-The LLM can only lower confidence (D-17). Autonomy is recommend-only (D-09): a human approves every rebook.
+The LLM can only lower confidence (D-17). *Refined by D-28, D-35 and D-41:* the signals actually used are FX use,
+margin above the threshold, snapshot age, the tier, and an incomplete picture (a rejected or unpriced offer on the route);
+the number of review-level differences is not used. Autonomy is recommend-only (D-09): a human approves every rebook.
 
 ## Depends on (team & context)
 - **Client contracts and travel policy:** what counts as an acceptable downgrade differs by corporate client and
